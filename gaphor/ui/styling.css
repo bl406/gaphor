@@ -185,6 +185,10 @@ flowboxchild:active {
   background-color: alpha(var(--shade-color), 2);
 }
 
+.mono {
+  font-family: monospace;
+}
+
 .style-editor-content {
   padding: 12px 24px 24px;
 }
@@ -222,8 +226,8 @@ flowboxchild:active {
   padding: 3px 6px 6px 6px;
 }
 
-/* Customize error reports in about dialog. */
-.about textview {
-  font-family: monospace;
-  font-size: 90%;
+.my-logo-img {
+  margin-right: 6px;
+  min-width: 20px;
+  min-height: 20px;
 }

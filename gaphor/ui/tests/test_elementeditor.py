@@ -99,7 +99,7 @@ def test_dump_css_tree(element_factory, create):
 
     assert text == textwrap.dedent(
         """\
-        class .item
+        class
          ├╴compartment
          │  ├╴stereotypes
          │  ├╴name

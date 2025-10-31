@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import tempfile
-from collections.abc import Awaitable, Callable
+import os
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from gi.repository import Adw, Gio, Gtk
 
 import gaphor.storage as storage
 from gaphor.abc import ActionProvider, Service
+from gaphor.asyncio import sleep
 from gaphor.babel import translate_model
 from gaphor.core import action, event_handler, gettext
 from gaphor.core.changeset.compare import compare
@@ -29,7 +32,8 @@ from gaphor.ui.errordialog import error_dialog
 from gaphor.ui.filedialog import GAPHOR_FILTER, save_file_dialog
 from gaphor.ui.statuswindow import StatusWindow
 
-DEFAULT_EXT = ".gaphor"
+DEFAULT_EXT = ".acsem"
+OUR_EXT = ".acbin"
 MAX_RECENT = 10
 
 log = logging.getLogger(__name__)
@@ -38,7 +42,7 @@ log = logging.getLogger(__name__)
 def error_message(e):
     if not isinstance(e, IOError):
         return gettext(
-            "Gaphor was not able to store the model, probably due to an internal error:\n{exc}\nIf you think this is a bug, please contact the developers."
+            "ACSEM was not able to store the model, probably due to an internal error:\n{exc}\nIf you think this is a bug, please contact the developers."
         ).format(exc=str(e))
     if e.errno == 13:
         return gettext(
@@ -143,8 +147,8 @@ class FileManager(Service, ActionProvider):
             parent=self.parent_window,
         )
 
-        async def progress(percentage, completed=0):
-            await status_window.progress(completed + percentage / 3)
+        def progress(percentage, completed=0):
+            status_window.progress(completed + percentage / 3)
 
         try:
             log.debug("Loading current model from %s", current_filename)
@@ -181,7 +185,7 @@ class FileManager(Service, ActionProvider):
     async def _load_async(
         self,
         filename: Path,
-        progress: Callable[[float], Awaitable[None]] | None = None,
+        progress: Callable[[int], None] | None = None,
         element_factory=None,
     ):
         factory = element_factory or self.element_factory
@@ -193,7 +197,8 @@ class FileManager(Service, ActionProvider):
                     self.modeling_language,
                 ):
                     if progress:
-                        await progress(percentage)
+                        progress(percentage)
+                    await sleep(0)
         except MergeConflictDetected:
             self.filename = None
             await self.resolve_merge_conflict(filename)
@@ -208,7 +213,7 @@ class FileManager(Service, ActionProvider):
                 ),
                 window=self.parent_window,
             )
-            self.event_manager.handle(SessionShutdown(quitting=False))
+            self.event_manager.handle(SessionShutdown())
 
     async def resolve_merge_conflict(self, filename: Path):
         temp_dir = tempfile.TemporaryDirectory()
@@ -227,7 +232,7 @@ class FileManager(Service, ActionProvider):
         if split:
             answer = await resolve_merge_conflict_dialog(self.parent_window)
             if answer == "cancel":
-                self.event_manager.handle(SessionShutdown(quitting=False))
+                self.event_manager.handle(SessionShutdown())
             elif answer == "current":
                 await self.load(current_filename)
             elif answer == "incoming":
@@ -252,7 +257,7 @@ class FileManager(Service, ActionProvider):
                 ),
                 window=self.parent_window,
             )
-            self.event_manager.handle(SessionShutdown(quitting=False))
+            self.event_manager.handle(SessionShutdown())
 
     async def save(self, filename):
         """Save the current model to the specified file name.
@@ -280,7 +285,8 @@ class FileManager(Service, ActionProvider):
             with filename.open("w", encoding="utf-8") as out:
                 for percentage in storage.save_generator(out, self.element_factory):
                     if status_window:
-                        await status_window.progress(percentage)
+                        status_window.progress(percentage)
+                    await sleep(0)
             self.event_manager.handle(ModelSaved(filename))
         except Exception as e:
             await error_dialog(
@@ -313,23 +319,56 @@ class FileManager(Service, ActionProvider):
         if filename := self.filename:
             await self.save(filename)
         else:
-            await self._save_as()
+            await self.action_save_as()
 
     @action(name="file-save-as", shortcut="<Primary><Shift>s")
     async def action_save_as(self):
         """Save the model in the element_factory by allowing the user to select
         a file name."""
-        await self._save_as()
 
-    async def _save_as(self):
         filename = await save_file_dialog(
             gettext("Save Gaphor Model As"),
-            self.filename or Path(gettext("New Model")).with_suffix(DEFAULT_EXT),
+            self.filename or Path(gettext("New Model")).with_suffix(".gaphor"),
             parent=self.parent_window,
             filters=GAPHOR_FILTER,
         )
         await self.save(filename)
+    
+    #Our Save Method
+    @action(name="file-save-as-word")
+    async def action_save_as_word(self):
+        word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+        src_filename = self.filename
+        default_name = (src_filename or Path(gettext("Word Document"))).with_suffix(".docx")
+        
+        # 1) 查找是否存在我们的模型文件
+        if not src_filename:
+            await error_dialog(
+                message=gettext("未找到数据文件"),
+                secondary_message=gettext(f"请将{OUR_EXT}文件放在正确的目录下。"),
+                window=self.parent_window,
+            )
+            return # 目录下没找到我们的模型文件，无法导出
+        
+        # 2) 选择保存路径
+        save_filename = await save_file_dialog(
+            gettext("导出为Word"),
+            default_name,
+            parent=self.parent_window,
+            filters=word_FILTER,
+        )
+        
+        if not save_filename:
+            return  # 取消
 
+        # 3） 执行导出
+        await self._export_model_to_word(src_filename, save_filename)
+
+    async def _export_model_to_word(self, src_path: Path, output_path: Path):
+        bin_path = src_path.with_suffix(OUR_EXT)
+        shutil.copy2(bin_path, output_path)
+        return
+        
     @event_handler(SessionCreated)
     async def _on_session_created(self, event: SessionCreated) -> None:
         if event.filename:
@@ -342,7 +381,7 @@ class FileManager(Service, ActionProvider):
 
     @event_handler(SessionShutdownRequested)
     async def _on_session_shutdown_request(
-        self, event: SessionShutdownRequested
+        self, _event: SessionShutdownRequested
     ) -> None:
         """Ask user to close window if the model has changed.
 
@@ -351,7 +390,7 @@ class FileManager(Service, ActionProvider):
         """
 
         def confirm_shutdown():
-            self.event_manager.handle(SessionShutdown(quitting=event.quitting))
+            self.event_manager.handle(SessionShutdown())
 
         if self.main_window.model_changed:
             answer = await save_changes_before_close_dialog(self.parent_window)
@@ -363,7 +402,7 @@ class FileManager(Service, ActionProvider):
                     filename = await save_file_dialog(
                         gettext("Save Gaphor Model As"),
                         self.filename
-                        or Path(gettext("New Model")).with_suffix(DEFAULT_EXT),
+                        or Path(gettext("New Model")).with_suffix(".gaphor"),
                         parent=self.parent_window,
                         filters=GAPHOR_FILTER,
                     )

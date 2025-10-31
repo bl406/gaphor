@@ -97,6 +97,7 @@ class ModelBrowser(UIComponent, ActionProvider):
         scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_child(self.tree_view)
 
+        apply_action_group(self, "tree-view", self.tree_view)
         apply_action_group(self, "selection", self.tree_view)
 
         self.tree_view.add_controller(
@@ -219,7 +220,7 @@ class ModelBrowser(UIComponent, ActionProvider):
             if el_type.id == id
         )
 
-    @action(name="win.create-element")
+    @action(name="tree-view.create-element")
     def tree_view_create_element(self, id: str):
         own = self.get_selected_element()
         element_def = self.element_type(id)
@@ -400,9 +401,7 @@ def toplevel_popup_model(modeling_language) -> Gio.Menu:
     model = create_diagram_types_model(modeling_language)
 
     part = Gio.Menu.new()
-    menu_item = Gio.MenuItem.new(gettext("Package"), "win.create-element")
-    menu_item.set_attribute_value("target", GLib.Variant.new_string("package"))
-    part.append_item(menu_item)
+    part.append(gettext("New _Package"), "tree-view.create-package")
     model.prepend_section(None, part)
     return model
 
@@ -643,7 +642,7 @@ def create_element_types_model(modeling_language, element):
 
     for id, name, _, allowed_owning_elements in modeling_language.element_types:
         if isinstance(element, allowed_owning_elements):
-            menu_item = Gio.MenuItem.new(gettext(name), "win.create-element")
+            menu_item = Gio.MenuItem.new(gettext(name), "tree-view.create-element")
             menu_item.set_attribute_value("target", GLib.Variant.new_string(id))
             model.append_item(menu_item)
 

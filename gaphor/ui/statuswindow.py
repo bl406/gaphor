@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from gi.repository import Adw, GLib, Gtk, Pango
 
-from gaphor.asyncio import sleep
-
 
 class StatusWindow:
     """Create a borderless window on the parent, usually the main window, with
@@ -37,11 +35,10 @@ class StatusWindow:
         self.window.add_css_class("status-window")
         self.window.present(parent)
 
-    async def progress(self, percentage: float):
+    def progress(self, percentage: float):
         """Update progress percentage (0..100)."""
         if self.progress_bar:
             self.progress_bar.set_fraction(min(percentage, 100.0) / 100.0)
-        await sleep(0)
 
     def done(self):
         """Close the status window."""
