@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import tempfile
+import os
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -30,7 +32,8 @@ from gaphor.ui.errordialog import error_dialog
 from gaphor.ui.filedialog import GAPHOR_FILTER, save_file_dialog
 from gaphor.ui.statuswindow import StatusWindow
 
-DEFAULT_EXT = ".gaphor"
+DEFAULT_EXT = ".acsem"
+OUR_EXT = ".acbin"
 MAX_RECENT = 10
 
 log = logging.getLogger(__name__)
@@ -39,7 +42,7 @@ log = logging.getLogger(__name__)
 def error_message(e):
     if not isinstance(e, IOError):
         return gettext(
-            "Gaphor was not able to store the model, probably due to an internal error:\n{exc}\nIf you think this is a bug, please contact the developers."
+            "ACSEM was not able to store the model, probably due to an internal error:\n{exc}\nIf you think this is a bug, please contact the developers."
         ).format(exc=str(e))
     if e.errno == 13:
         return gettext(
@@ -330,7 +333,42 @@ class FileManager(Service, ActionProvider):
             filters=GAPHOR_FILTER,
         )
         await self.save(filename)
+    
+    #Our Save Method
+    @action(name="file-save-as-word")
+    async def action_save_as_word(self):
+        word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+        src_filename = self.filename
+        default_name = (src_filename or Path(gettext("Word Document"))).with_suffix(".docx")
+        
+        # 1) 查找是否存在我们的模型文件
+        if not src_filename:
+            await error_dialog(
+                message=gettext("未找到数据文件"),
+                secondary_message=gettext(f"请将{OUR_EXT}文件放在正确的目录下。"),
+                window=self.parent_window,
+            )
+            return # 目录下没找到我们的模型文件，无法导出
+        
+        # 2) 选择保存路径
+        save_filename = await save_file_dialog(
+            gettext("导出为Word"),
+            default_name,
+            parent=self.parent_window,
+            filters=word_FILTER,
+        )
+        
+        if not save_filename:
+            return  # 取消
 
+        # 3） 执行导出
+        await self._export_model_to_word(src_filename, save_filename)
+
+    async def _export_model_to_word(self, src_path: Path, output_path: Path):
+        bin_path = src_path.with_suffix(OUR_EXT)
+        shutil.copy2(bin_path, output_path)
+        return
+        
     @event_handler(SessionCreated)
     async def _on_session_created(self, event: SessionCreated) -> None:
         if event.filename:

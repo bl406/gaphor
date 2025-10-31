@@ -18,10 +18,6 @@
         <attribute name='label' translatable='yes'>Keyboard Shortcuts</attribute>
         <attribute name='action'>app.shortcuts</attribute>
       </item>
-      <item>
-        <attribute name='label' translatable='yes'>About Gaphor</attribute>
-        <attribute name='action'>app.about</attribute>
-      </item>
     </section>
   </menu>
 
@@ -43,7 +39,7 @@
                 <property name="valign">center</property>
                 <child>
                   <object class="GtkLabel" id="title">
-                    <property name="label">Gaphor</property>
+                    <property name="label">ACSEM</property>
                     <style>
                       <class name="title"/>
                     </style>

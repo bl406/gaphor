@@ -114,7 +114,7 @@
                             </child>
                             <child type="center">
                               <object class="GtkLabel" id="title">
-                                <property name="label">Gaphor</property>
+                                <property name="label">ACSEM</property>
                                 <property name="ellipsize">end</property>
                                 <property name="width-chars">3</property>
                                 <attributes>
@@ -271,6 +271,10 @@
         <attribute name="action">win.file-save-as</attribute>
       </item>
       <item>
+        <attribute name="label" translatable="yes">导出为Word</attribute>
+        <attribute name="action">win.file-save-as-word</attribute>
+      </item>
+      <item>
         <link name="section" id="export-menu"/>
       </item>
     </section>
@@ -287,10 +291,6 @@
       <item>
         <attribute name="label" translatable="yes">Keyboard Shortcuts</attribute>
         <attribute name="action">app.shortcuts</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">About Gaphor</attribute>
-        <attribute name="action">app.about</attribute>
       </item>
     </section>
   </menu>

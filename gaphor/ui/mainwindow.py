@@ -6,7 +6,9 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from gi.repository import Gio, GLib, Gtk
+from gi.repository import Gio, GLib, Gtk, GdkPixbuf
+from gi.repository import Adw
+from importlib.resources import files
 
 from gaphor.abc import ActionProvider, Service
 from gaphor.application import distribution
@@ -152,6 +154,63 @@ class MainWindow(Service, ActionProvider):
             create_modeling_language_model(self.modeling_language)
         )
         self.modeling_language_name = builder.get_object("modeling-language-name")
+        
+        ### 查找logo
+        def _find_headerbar(w: Gtk.Widget | None):
+            while w is not None and not isinstance(w, Adw.HeaderBar):
+                w = w.get_parent()
+            return w
+
+        hb = _find_headerbar(select_modeling_language)
+        if hb is not None:
+            choice = 3  ###1表示插入图标，2表示插入按钮,3表示插入设定大小图标
+            if choice == 1:
+                ###定义一个图标并插入到headerbar的左侧
+                logo_path = files("gaphor.ui.icons").joinpath("logo.png")
+                logo_img = Gtk.Image.new_from_file(str(logo_path))
+                logo_img.set_tooltip_text("My Logo")
+
+                parent = select_modeling_language.get_parent()
+                if parent is not None:
+                    parent.remove(select_modeling_language)
+                    
+                hb.pack_start(logo_img)
+                hb.pack_start(select_modeling_language)
+                ###结束插入图标
+            elif choice == 2:
+            ###定义一个按钮并插入到headerbar的左侧
+                logo_path = files("gaphor.ui.icons").joinpath("logo.png")
+                logo_img = Gtk.Image.new_from_file(str(logo_path))
+                
+                logo_btn = Gtk.Button()
+                logo_btn.set_child(logo_img)
+                logo_btn.add_css_class("flat")
+                logo_btn.set_tooltip_text("My logo")
+
+                def _on_logo_clicked(_btn):
+                    Gio.AppInfo.launch_default_for_uri("https://gaphor.org")
+                logo_btn.connect("clicked", _on_logo_clicked)
+                
+                parent = select_modeling_language.get_parent()
+                if parent is not None:
+                    parent.remove(select_modeling_language)
+                    
+                hb.pack_start(logo_btn)
+                hb.pack_start(select_modeling_language)
+            else:
+                logo_path = files("gaphor.ui.icons").joinpath("logo.png")
+                pix = GdkPixbuf.Pixbuf.new_from_file(str(logo_path))
+                scaled = pix.scale_simple(80, 80, GdkPixbuf.InterpType.BILINEAR)  # 设定原本图片清晰程度
+                logo_img = Gtk.Image.new_from_pixbuf(scaled)
+                logo_img.add_css_class("my-logo-img") #设定应该渲染成多大
+
+                parent = select_modeling_language.get_parent()
+                if parent is not None:
+                    parent.remove(select_modeling_language)
+
+                hb.pack_start(logo_img)
+                hb.pack_start(select_modeling_language)
+            ###结束插入按钮
 
         self.diagram_types = builder.get_object("diagram-types")
         self.diagram_types.set_menu_model(
@@ -267,9 +326,9 @@ class MainWindow(Service, ActionProvider):
             pretty_path(filename) if filename else gettext("New model")
         )
         window.set_title(
-            f"{filename.name} ({pretty_path(filename.parent)}) - Gaphor"
+            f"{filename.name} ({pretty_path(filename.parent)}) - ACSEM"
             if filename
-            else f"{gettext('New model')} - Gaphor"
+            else f"{gettext('New model')} - ACSEM"
         )
 
         self.model_changed = False
@@ -283,7 +342,7 @@ class MainWindow(Service, ActionProvider):
     @event_handler(CurrentDiagramChanged)
     def _on_current_diagram_changed(self, event):
         self.title.set_text(
-            (event.diagram.name or gettext("<None>")) if event.diagram else "Gaphor"
+            (event.diagram.name or gettext("<None>")) if event.diagram else "ACSEM"
         )
 
     @event_handler(UndoManagerStateChanged)

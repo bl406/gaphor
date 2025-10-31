@@ -35,14 +35,6 @@ class HelpService(Service, ActionProvider):
     def window(self):
         return self.application.active_window
 
-    @action(name="app.about")
-    def about(self):
-        builder = new_builder("about")
-        about = builder.get_object("about")
-
-        about.set_version(distribution().version)
-        about.present(self.window)
-
     @action(name="app.shortcuts", shortcut="<Primary>question")
     def shortcuts(self):
         builder = Gtk.Builder()

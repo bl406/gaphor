@@ -225,3 +225,9 @@ flowboxchild:active {
   margin: 0;
   padding: 3px 6px 6px 6px;
 }
+
+.my-logo-img {
+  margin-right: 6px;
+  min-width: 20px;
+  min-height: 20px;
+}

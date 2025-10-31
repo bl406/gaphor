@@ -22,6 +22,10 @@
           <attribute name="label" translatable="yes">Save As…</attribute>
           <attribute name="action">win.file-save-as</attribute>
         </item>
+        <item>
+          <attribute name="label" translatable="no">导出为Word</attribute>
+          <attribute name="action">win.file-save-as</attribute>
+        </item>
       </section>
       <section>
         <link name="section" id="export-menu"/>
