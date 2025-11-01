@@ -11,7 +11,8 @@ from gi.repository import Gio, GLib, Gtk
 
 from gaphor.i18n import gettext
 
-GAPHOR_FILTER = [(gettext("Gaphor Models"), "*.gaphor", "application/x-gaphor")]
+GAPHOR_FILTER = [(gettext("ACSEM Models"), "*.acsem", "application/x-gaphor"),
+                 (gettext("Gaphor Models"), "*.gaphor", "application/x-gaphor")]
 
 
 def new_filter(name: str, pattern: str, mime_type: str | None = None) -> Gtk.FileFilter:
