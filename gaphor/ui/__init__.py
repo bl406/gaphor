@@ -18,6 +18,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk, GtkSource
 
+import gaphor.ui.utils  # noqa: F401
 import gaphor.asyncio
 import gaphor.ui.diagramview  # noqa: F401
 import gaphor.ui.textfield  # noqa: F401

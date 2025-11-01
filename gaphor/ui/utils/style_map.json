@@ -1,0 +1,16 @@
+{
+  "Heading": {
+    "1": "wc一级标题",
+    "2": "wc二级标题",
+    "3": "wc三级标题",
+    "4": "wc四级标题",
+    "5": "wc五级标题"
+  },
+  "Body": "wc正文",
+  "FigCaption": "wc图注",
+  "TabCaption": "wc表注",
+  "TableBody": "wc表中文",
+  "List": "wc正文",
+  "CenteredTitle": "wc居中一级标题",
+  "ImagePara": "wc图片段落"
+}

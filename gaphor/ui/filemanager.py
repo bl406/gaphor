@@ -6,6 +6,8 @@ import logging
 import shutil
 import tempfile
 import os
+from gaphor.ui import utils
+from importlib.resources import files
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -29,7 +31,7 @@ from gaphor.event import (
 from gaphor.storage.mergeconflict import split_ours_and_theirs
 from gaphor.storage.parser import MergeConflictDetected
 from gaphor.ui.errordialog import error_dialog
-from gaphor.ui.filedialog import GAPHOR_FILTER, save_file_dialog
+from gaphor.ui.filedialog import GAPHOR_FILTER, save_file_dialog, open_file_dialog
 from gaphor.ui.statuswindow import StatusWindow
 
 import tarfile
@@ -371,7 +373,7 @@ class FileManager(Service, ActionProvider):
     async def action_save_as_word(self):
         word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
         src_filename = self.filename
-        default_name = (src_filename or Path(gettext("Word Document"))).with_suffix(".docx")
+        default_name = (self.filename or Path(gettext("Word Document"))).with_suffix(".docx")
         
         # 1) 查找是否存在我们的模型文件
         if not src_filename:
@@ -401,6 +403,55 @@ class FileManager(Service, ActionProvider):
         shutil.copy2(bin_path, output_path)
         return
         
+    @action(name="file-format-document")
+    async def action_format_document(self):
+        word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+        default_name = (self.filename or Path(gettext("Word Document"))).with_suffix(".docx")
+        dir_path_str = str(default_name.parent)
+
+        #选择文档
+        open_path = await open_file_dialog(
+            gettext("选择要格式化的文档"),
+            self.parent_window,
+            dirname=dir_path_str if self.filename else None,
+            filters=word_FILTER,
+            multiple=False
+        )
+
+        if not open_path:
+            return  # 用户取消
+        
+        if not open_path.suffix.lower() == ".docx":
+            await error_dialog(
+                message=gettext("无效的文件类型"),
+                secondary_message=gettext("请选择一个有效的Word文档（.docx）。"),
+                window=self.parent_window,
+            )
+            return  # 非.docx文件，取消
+        
+        print(open_path)
+        print(open_path.stem + "_formatted.docx")
+        save_path = await save_file_dialog(
+            gettext("保存格式化后的文档"),
+            Path(open_path.parent, open_path.stem + "_formatted.docx"),
+            parent=self.parent_window,
+            filters=word_FILTER,
+        )
+
+        if not save_path:
+            return  # 用户取消
+
+        try:
+            # TODO: 用你的实现替换这行：
+            utils.format.docx_format(open_path, save_path, files("gaphor.ui.utils").joinpath("template.docx"), files("gaphor.ui.utils").joinpath("style_map.json"))
+            # 例如：await self._export_model_to_word(src_path, dst_path)
+        except Exception as e:
+            await error_dialog(
+                message=gettext("格式化失败"),
+                secondary_message=str(e),
+                window=self.parent_window,
+            )
+    
     @event_handler(SessionCreated)
     async def _on_session_created(self, event: SessionCreated) -> None:
         if event.filename:
