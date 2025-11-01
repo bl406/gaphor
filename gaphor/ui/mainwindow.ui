@@ -275,6 +275,10 @@
         <attribute name="action">win.file-save-as-word</attribute>
       </item>
       <item>
+        <attribute name="label" translatable="yes">文档格式化...</attribute>
+        <attribute name="action">win.file-format-document</attribute>
+      </item>
+      <item>
         <link name="section" id="export-menu"/>
       </item>
     </section>
