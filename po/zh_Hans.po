@@ -631,7 +631,7 @@ msgstr "验证"
 
 #: gaphor/SysML/requirements/relationships.py:48
 msgid "refine"
-msgstr "提炼"
+msgstr "细化"
 
 #: gaphor/SysML/requirements/requirement.py:56
 msgid "requirement"
@@ -656,7 +656,7 @@ msgstr "跟踪"
 
 #: gaphor/SysML/requirements/requirementstoolbox.py:50
 msgid "Refine"
-msgstr "提炼"
+msgstr "细化"
 
 #: gaphor/SysML/requirements/requirementstoolbox.py:57
 msgid "Verify"
@@ -665,7 +665,7 @@ msgstr "验证"
 #: gaphor/SysML/requirements/requirementstoolbox.py:64
 #: gaphor/UML/classes/classestoolbox.py:75
 msgid "Containment"
-msgstr "遏制"
+msgstr "包含"
 
 #: gaphor/UML/compartments.py:62
 msgid "(from {namespace})"
