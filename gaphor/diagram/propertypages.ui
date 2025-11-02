@@ -312,8 +312,13 @@
     </style>
   </object>
 
-<object class="GtkBox" id="show-images">
+  <object class="GtkBox" id="show-tools">
     <property name="orientation">vertical</property>
+    <property name="spacing">6</property>
+    <property name="hexpand">true</property>     
+    <style>
+      <class name="propertypage"/>
+    </style>
     <child>
       <object class="GtkLabel">
         <property name="label" translatable="yes">工具</property>
@@ -324,15 +329,33 @@
       </object>
     </child>
     <child>
-      <object class="GtkButton">
-        <property name="label" translatable="yes">搜索图片</property>
-        <signal name="clicked" handler="open-show-images" swapped="no"/>
+      <object class="GtkBox">
+        <property name="orientation">horizontal</property>
+        <property name="spacing">6</property>
+        <property name="homogeneous">true</property>
+        <style>
+          <class name="linked"/>
+        </style>
+        <child>
+          <object class="GtkButton" id="btn-show-images">
+            <property name="label">搜索图片</property>
+            <property name="hexpand">true</property> 
+            <property name="halign">fill</property>
+            <signal name="clicked" handler="open-show-images"/>
+          </object>
+        </child>
+        <child>
+          <object class="GtkButton" id="btn-show-tables">
+            <property name="label">搜索表格</property>
+            <property name="hexpand">true</property>
+            <property name="halign">fill</property>
+            <signal name="clicked" handler="open-show-tables"/>
+          </object>
+        </child>
       </object>
     </child>
-    <style>
-      <class name="propertypage"/>
-    </style>
   </object>
+
 
   <object class="GtkBox" id="style-editor">
     <property name="orientation">vertical</property>

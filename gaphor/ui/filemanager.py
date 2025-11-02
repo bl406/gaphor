@@ -108,6 +108,15 @@ class FileManager(Service, ActionProvider):
             state.image_tree = tree
         except Exception:
             log.exception("Failed to build image tree for %s", filename)
+            
+    async def _build_table_tree_background(self, filename: Path) -> None:
+        try:
+            docx_file = filename.with_suffix('.acbin')
+            print(docx_file)
+            tree = await asyncio.to_thread(utils.table_tree.Create_table_tree, docx_file)
+            state.table_tree = tree
+        except Exception:
+            log.exception("Failed to build table tree for %s", filename)
 
     def shutdown(self):
         """Called when shutting down the file manager service."""
@@ -152,6 +161,7 @@ class FileManager(Service, ActionProvider):
             extraction_folder = Path('./temp_extracted').absolute()
             delete_all_files_and_dirs(extraction_folder)  # 清空目录
             # untar the file with filename to a local dir
+            print(filename)
             with tarfile.open(filename, 'r') as tar:
                 # 将所有内容解压到指定路径
                 tar.extractall(path=extraction_folder)                
@@ -164,6 +174,7 @@ class FileManager(Service, ActionProvider):
 
         try:
             filename_realread = filename
+            print(filename)
             if filename.suffix == DEFAULT_EXT:
                 file_stem = filename.stem  # 去掉扩展名后的文件名
                 gaphor_fn = os.path.join(extraction_folder,file_stem,file_stem+'.gaphor')   
@@ -174,7 +185,9 @@ class FileManager(Service, ActionProvider):
         finally:
             status_window.done()
         self.event_manager.handle(ModelReady(self, filename=filename_realread))
+        state.docx_path = filename_realread.with_suffix('.acbin')
         asyncio.create_task(self._build_image_tree_background(filename_realread))
+        asyncio.create_task(self._build_table_tree_background(filename_realread))
 
 
     @action("file-reload")

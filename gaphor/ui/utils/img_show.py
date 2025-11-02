@@ -278,9 +278,13 @@ def find_node_by_text(node, txt):
 
 def get_datalist_by_text(image_tree, txt):
     # 收集txt下的所有data
+    if not txt:
+        return collect_data_from_node(image_tree)
+    
     node = find_node_by_text(image_tree, txt)
-    data_list = collect_data_from_node(node)
-    return data_list
+    if not node:
+        return []
+    return collect_data_from_node(node)
     
 def get_outline_level_of_style(style):
     try:
