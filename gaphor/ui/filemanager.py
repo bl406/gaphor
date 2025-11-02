@@ -37,6 +37,8 @@ from gaphor.ui.errordialog import error_dialog
 from gaphor.ui.filedialog import GAPHOR_FILTER, save_file_dialog, open_file_dialog
 from gaphor.ui.statuswindow import StatusWindow
 
+import tarfile
+
 DEFAULT_EXT = ".acsem"
 OUR_EXT = ".acbin"
 MAX_RECENT = 10
@@ -61,6 +63,21 @@ def error_message(e):
         "The model cannot be stored at this location:\n{exc}\nPlease check that you typed the location correctly and try again."
     ).format(exc=str(e))
 
+def delete_all_files_and_dirs(target_dir: Path):
+    # 确保目标是目录
+    if not target_dir.is_dir():
+        raise ValueError(f"{target_dir} 不是有效目录")
+    
+    # 递归处理子目录：先删除子目录内的所有内容
+    for item in target_dir.iterdir():
+        if item.is_file():
+            # 删除文件
+            item.unlink()            
+        elif item.is_dir():
+            # 递归删除子目录（先删子目录内的内容，再删自身）
+            delete_all_files_and_dirs(item)
+            # 子目录内容删除后，删除空目录
+            item.rmdir()
 
 class FileManager(Service, ActionProvider):
     """The file service, responsible for loading and saving Gaphor models."""
@@ -77,6 +94,7 @@ class FileManager(Service, ActionProvider):
         self.main_window = main_window
         self._filename: Path | None = None
         self._monitor: Gio.Monitor | None = None
+        self._filename_realread: Path | None = None
 
         event_manager.subscribe(self._on_session_shutdown_request)
         event_manager.subscribe(self._on_session_created)
@@ -84,7 +102,9 @@ class FileManager(Service, ActionProvider):
     ### 构建图片树
     async def _build_image_tree_background(self, filename: Path) -> None:
         try:
-            tree = await asyncio.to_thread(utils.img_show.Create_image_tree, files("gaphor.ui.utils").joinpath("载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx"))
+            docx_file = filename.with_suffix('.acbin')
+            print(docx_file)
+            tree = await asyncio.to_thread(utils.img_show.Create_image_tree, docx_file)
             state.image_tree = tree
         except Exception:
             log.exception("Failed to build image tree for %s", filename)
@@ -126,7 +146,15 @@ class FileManager(Service, ActionProvider):
         successful, the filename is set.
         """
         # First claim file name, so any other files will be opened in a different session
-        self.filename = filename
+        self.filename = filename       
+
+        if filename.suffix == DEFAULT_EXT:
+            extraction_folder = Path('./temp_extracted').absolute()
+            delete_all_files_and_dirs(extraction_folder)  # 清空目录
+            # untar the file with filename to a local dir
+            with tarfile.open(filename, 'r') as tar:
+                # 将所有内容解压到指定路径
+                tar.extractall(path=extraction_folder)                
 
         status_window = StatusWindow(
             gettext("Loading…"),
@@ -135,12 +163,19 @@ class FileManager(Service, ActionProvider):
         )
 
         try:
-            await self._load_async(filename, status_window.progress)
+            filename_realread = filename
+            if filename.suffix == DEFAULT_EXT:
+                file_stem = filename.stem  # 去掉扩展名后的文件名
+                gaphor_fn = os.path.join(extraction_folder,file_stem,file_stem+'.gaphor')   
+                filename_realread = Path(gaphor_fn)
+                self._filename_realread = filename_realread
+            print("filename really read:",filename_realread.name)
+            await self._load_async(filename_realread, status_window.progress)
         finally:
             status_window.done()
-        self.event_manager.handle(ModelReady(self, filename=filename))
-        asyncio.create_task(self._build_image_tree_background(filename))
-        
+        self.event_manager.handle(ModelReady(self, filename=filename_realread))
+        asyncio.create_task(self._build_image_tree_background(filename_realread))
+
 
     @action("file-reload")
     async def reload(self):
@@ -217,7 +252,8 @@ class FileManager(Service, ActionProvider):
         except MergeConflictDetected:
             self.filename = None
             await self.resolve_merge_conflict(filename)
-        except Exception:
+        except Exception as e:
+            print("Exception during load:",e)
             self.filename = None
             await error_dialog(
                 message=gettext("Unable to open model “{filename}”.").format(
@@ -353,7 +389,7 @@ class FileManager(Service, ActionProvider):
     @action(name="file-save-as-word")
     async def action_save_as_word(self):
         word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
-        src_filename = self.filename
+        src_filename = self._filename_realread
         default_name = (self.filename or Path(gettext("Word Document"))).with_suffix(".docx")
         
         # 1) 查找是否存在我们的模型文件
