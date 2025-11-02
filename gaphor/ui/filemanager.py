@@ -6,7 +6,10 @@ import logging
 import shutil
 import tempfile
 import os
+import asyncio
 from gaphor.ui import utils
+from gaphor.ui.utils import state
+
 from importlib.resources import files
 from collections.abc import Callable
 from functools import partial
@@ -77,6 +80,14 @@ class FileManager(Service, ActionProvider):
 
         event_manager.subscribe(self._on_session_shutdown_request)
         event_manager.subscribe(self._on_session_created)
+    
+    ### 构建图片树
+    async def _build_image_tree_background(self, filename: Path) -> None:
+        try:
+            tree = await asyncio.to_thread(utils.img_show.Create_image_tree, files("gaphor.ui.utils").joinpath("载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx"))
+            state.image_tree = tree
+        except Exception:
+            log.exception("Failed to build image tree for %s", filename)
 
     def shutdown(self):
         """Called when shutting down the file manager service."""
@@ -128,6 +139,8 @@ class FileManager(Service, ActionProvider):
         finally:
             status_window.done()
         self.event_manager.handle(ModelReady(self, filename=filename))
+        asyncio.create_task(self._build_image_tree_background(filename))
+        
 
     @action("file-reload")
     async def reload(self):

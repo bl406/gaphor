@@ -1,6 +1,7 @@
-from gi.repository import Gdk, Gtk
-
-from gaphor.core import event_handler
+from gi.repository import Gdk, Gtk, Gio, GLib, Adw
+from pathlib import Path
+from gaphor.ui.utils import state
+from gaphor.core import event_handler, gettext
 from gaphor.core.modeling import (
     AttributeUpdated,
     ElementDeleted,
@@ -8,11 +9,66 @@ from gaphor.core.modeling import (
     StyleSheet,
     css_name,
 )
+from gaphor.ui import utils
 from gaphor.core.modeling.diagram import StyledItem
 from gaphor.core.styling import Color, Style
 from gaphor.diagram.propertypages import PropertyPageBase, PropertyPages, new_builder
 from gaphor.i18n import translated_ui_string
 from gaphor.transaction import Transaction
+from importlib.resources import files
+
+
+class ImagesViewerWindow(Gtk.Window):
+    def __init__(self, parent_window: Gtk.Window, datalist, query: str):
+        super().__init__(title=f"图片检索：{query} ('共{len(datalist)}张图片')")
+        self.set_transient_for(parent_window)
+        self.set_default_size(900, 600)
+
+        # 滚动容器（纵向滚动）
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
+
+        # 内容容器（纵向排布）
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        scrolled.set_child(box)
+        self.set_child(scrolled)
+
+        # === 逐条渲染：图片 + 描述 ===
+        for tup in datalist:
+            if not isinstance(tup, (tuple, list)) or len(tup) < 3:
+                continue
+            img_bytes, caption, img_id = tup
+
+            # 将 bytes 转换为 Gdk.Texture（无须 GdkPixbuf）
+            texture = None
+            try:
+                texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(img_bytes))
+            except Exception:
+                # 跳过坏图
+                continue
+
+            # 显示图片：用 Gtk.Picture，自动缩放不失真
+            picture = Gtk.Picture.new_for_paintable(texture)
+            picture.set_halign(Gtk.Align.CENTER)
+            picture.set_can_shrink(True)
+            picture.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
+            picture.set_size_request(200, 300)
+            box.append(picture)
+
+            # 显示描述（在图片下面）
+            text_parts = []
+            if isinstance(caption, str) and caption.strip():
+                text_parts.append(caption.strip())
+            text_parts.append(f"(ID: {img_id})")
+            label = Gtk.Label(label="  ".join(text_parts))
+            label.set_wrap(True)
+            label.set_xalign(0.0)
+            label.set_halign(Gtk.Align.CENTER)
+            box.append(label)
 
 
 @PropertyPages.register(Presentation)
@@ -35,12 +91,29 @@ class StylePropertyPage(PropertyPageBase):
                 "open-style-editor": (self._on_open_style_editor,),
             },
         )
+        # 新增：show-images 的 Builder
+        self.propertypages_builder_image = new_builder(
+            "show-images",
+            signals={"open-show-images": (self._on_open_show_images,)}
+        )
+        
 
     def construct(self):
         if not self.subject:
             return
         assert self.watcher
-        return self.propertypages_builder.get_object("style-editor")
+        # 返回“样式编辑”那块已有的 widget（保持原行为）
+        editor_box = self.propertypages_builder.get_object("style-editor")
+        
+        # 取到我们新加的“Show images”按钮区块
+        images_box = self.propertypages_builder_image.get_object("show-images")
+        
+        # 把两个块垂直叠加（也可以改为只返回 images_box，看你想怎么排）
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        vbox.append(images_box)
+        vbox.append(editor_box)
+        return vbox
+        # return self.propertypages_builder.get_object("style-editor")
 
     def _on_open_style_editor(self, button):
         if StylePropertyPage.style_editor:
@@ -56,6 +129,22 @@ class StylePropertyPage(PropertyPageBase):
         )
         StylePropertyPage.style_editor.present()
 
+    def _on_open_show_images(self, _button):
+        # 取当前块的“名称”（如果有 subject 就优先用 subject.name）
+        title = getattr(getattr(self.subject, "subject", None), "name", None)
+        if not title:
+            # 退化：拿呈现项的类型名
+            title = type(self.subject).__name__
+        # 打开“图片展示”窗口
+        tree = state.image_tree
+        datalist = utils.img_show.get_datalist_by_text(tree, title)
+        win = ImagesViewerWindow(
+            parent_window=self.main_window.window,
+            datalist=datalist,
+            query=title
+        )
+        win.present()
+    
     def close_style_editor(self):
         StylePropertyPage.style_editor = None
 
