@@ -39,8 +39,10 @@ from gaphor.ui.statuswindow import StatusWindow
 
 import tarfile
 
+READ_TEMPDIR = './read_temp'
+WRITE_TEMPDIR = './write_temp'
 DEFAULT_EXT = ".acsem"
-OUR_EXT = ".acbin"
+DOC_EXT = ".acbin"
 MAX_RECENT = 10
 
 log = logging.getLogger(__name__)
@@ -158,8 +160,9 @@ class FileManager(Service, ActionProvider):
         self.filename = filename       
 
         if filename.suffix == DEFAULT_EXT:
-            extraction_folder = Path('./temp_extracted').absolute()
-            delete_all_files_and_dirs(extraction_folder)  # 清空目录
+            extraction_folder = Path(READ_TEMPDIR).absolute()
+            if extraction_folder.exists() == True:
+                delete_all_files_and_dirs(extraction_folder)  # 清空目录
             # untar the file with filename to a local dir
             print(filename)
             with tarfile.open(filename, 'r') as tar:
@@ -346,12 +349,38 @@ class FileManager(Service, ActionProvider):
         )
 
         try:
-            with filename.open("w", encoding="utf-8") as out:
-                for percentage in storage.save_generator(out, self.element_factory):
-                    if status_window:
-                        status_window.progress(percentage)
-                    await sleep(0)
-            self.event_manager.handle(ModelSaved(filename))
+            if filename.suffix != DEFAULT_EXT:
+                with filename.open("w", encoding="utf-8") as out:
+                    for percentage in storage.save_generator(out, self.element_factory):
+                        if status_window:
+                            status_window.progress(percentage)
+                        await sleep(0)
+                self.event_manager.handle(ModelSaved(filename))
+            else:
+                if not self._filename_realread.with_suffix(DOC_EXT):
+                    await error_dialog(
+                        message=gettext("无法保存模型"),
+                        secondary_message=gettext("模型文件被损坏，无法找到保存所需的模型数据。"),
+                        window=self.parent_window,
+                    )
+                    return # 目录下没找到我们的模型文件，无法保存  
+                 
+                export_folder = Path(WRITE_TEMPDIR).absolute()
+                if export_folder.exists() == True:
+                    delete_all_files_and_dirs(export_folder)  # 清空目录
+                export_folder = export_folder.joinpath(self.filename.stem)
+                export_folder.mkdir(parents=True, exist_ok=True)
+
+                doc_filename = export_folder.joinpath(self._filename_realread.with_suffix(DOC_EXT).name)
+                shutil.copy2(self._filename_realread.with_suffix(DOC_EXT), doc_filename)
+                
+                gaphor_file = os.path.join(export_folder,self.filename.stem+'.gaphor')                   
+                await self.save(Path(gaphor_file))               
+                
+                # 打包成tar文件
+                with tarfile.open(filename, 'w') as tar:
+                    tar.add(export_folder, arcname=os.path.basename(export_folder))                                   
+                             
         except Exception as e:
             await error_dialog(
                 message=gettext("Unable to save model “{filename}”.").format(
@@ -390,31 +419,46 @@ class FileManager(Service, ActionProvider):
         """Save the model in the element_factory by allowing the user to select
         a file name."""
 
-        filename = await save_file_dialog(
-            gettext("Save Gaphor Model As"),
-            self.filename or Path(gettext("New Model")).with_suffix(".gaphor"),
-            parent=self.parent_window,
-            filters=GAPHOR_FILTER,
-        )
+        if self.filename.suffix == DEFAULT_EXT:
+            filename = await save_file_dialog(
+                gettext("Save Gaphor Model As"),
+                self.filename or Path(gettext("New Model")).with_suffix(DEFAULT_EXT),
+                parent=self.parent_window,
+                filters=[(gettext("Gaphor Models"), "*.acsem", "application/x-gaphor")]
+            )
+        else:
+            filename = await save_file_dialog(
+                gettext("Save Gaphor Model As"),
+                self.filename or Path(gettext("New Model")).with_suffix(".gaphor"),
+                parent=self.parent_window,
+                filters=[(gettext("Gaphor Models"), "*.gaphor", "application/x-gaphor")],
+            )
         await self.save(filename)
-    
+        
     #Our Save Method
     @action(name="file-save-as-word")
     async def action_save_as_word(self):
-        word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
-        src_filename = self._filename_realread
-        default_name = (self.filename or Path(gettext("Word Document"))).with_suffix(".docx")
+        if self.filename.suffix != DEFAULT_EXT:
+            await error_dialog(
+                message=gettext("不支持的保存类型"),
+                secondary_message=gettext("只支持从.acsem文件保存为Word文档。"),
+                window=self.parent_window,
+            )
+            return
         
-        # 1) 查找是否存在我们的模型文件
+        src_filename = self._filename_realread.with_suffix(DOC_EXT)
+         # 查找是否存在我们的模型文件
         if not src_filename:
             await error_dialog(
-                message=gettext("未找到数据文件"),
-                secondary_message=gettext(f"请将{OUR_EXT}文件放在正确的目录下。"),
+                message=gettext("无法导出模型"),
+                secondary_message=gettext("模型文件被损坏，无法找到导出所需的模型数据。"),
                 window=self.parent_window,
             )
             return # 目录下没找到我们的模型文件，无法导出
         
-        # 2) 选择保存路径
+        word_FILTER = [(gettext("Word Document"), "*.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+        default_name = (self.filename or Path(gettext("Word Document"))).with_suffix(".docx")
+        # 选择保存路径
         save_filename = await save_file_dialog(
             gettext("导出为Word"),
             default_name,
@@ -426,12 +470,7 @@ class FileManager(Service, ActionProvider):
             return  # 取消
 
         # 3） 执行导出
-        await self._export_model_to_word(src_filename, save_filename)
-
-    async def _export_model_to_word(self, src_path: Path, output_path: Path):
-        bin_path = src_path.with_suffix(OUR_EXT)
-        shutil.copy2(bin_path, output_path)
-        return
+        shutil.copy2(src_filename, save_filename)
         
     @action(name="file-format-document")
     async def action_format_document(self):
