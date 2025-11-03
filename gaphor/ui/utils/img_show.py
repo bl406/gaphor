@@ -115,7 +115,7 @@ def extract_images_with_captions(doc_path):
                 # index, caption_txt = split_figure_caption(caption)
                 # results.append((img, index, caption_txt, caption))
                 image_para_index = i
-                node['data'].append((img, caption, image_para_index))
+                node['data'].append(('image', img, caption, image_para_index))
         i += 1
 
     return root

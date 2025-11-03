@@ -21,8 +21,8 @@ from gaphor.ui.utils.table_tree import wcTable
 from docx import Document
 
 class ImagesViewerWindow(Gtk.Window):
-    def __init__(self, parent_window: Gtk.Window, datalist, query: str):
-        super().__init__(title=f"图片检索：{query} ('共{len(datalist)}张图片')")
+    def __init__(self, parent_window: Gtk.Window, datalist, title: str):
+        super().__init__(title=title)
         self.set_transient_for(parent_window)
         self.set_default_size(900, 600)
 
@@ -41,9 +41,7 @@ class ImagesViewerWindow(Gtk.Window):
 
         # === 逐条渲染：图片 + 描述 ===
         for tup in datalist:
-            if not isinstance(tup, (tuple, list)) or len(tup) < 3:
-                continue
-            img_bytes, caption, img_id = tup
+            tag, img_bytes, caption, img_id = tup
 
             # 将 bytes 转换为 Gdk.Texture（无须 GdkPixbuf）
             texture = None
@@ -81,9 +79,8 @@ class TablesViewerWindow(Gtk.ApplicationWindow):
     - 底部：状态栏（可显示计数/提示）
     - 快捷键：Esc / Ctrl+W 关闭；Ctrl+F 聚焦搜索框
     """
-    def __init__(self, parent_window: Gtk.Window, datalist, query: str):
+    def __init__(self, parent_window: Gtk.Window, datalist, title: str):
         app = parent_window.get_application() if parent_window else None
-        title = self._make_title(query, datalist)
 
         super().__init__(application=app, title=title)
         if parent_window:
@@ -92,7 +89,6 @@ class TablesViewerWindow(Gtk.ApplicationWindow):
         self.set_default_size(350, 680)
 
         # ---- 数据 ----
-        self.query = query or ""
         self.datalist = datalist or []
 
         # ---- 顶层布局：垂直 Box ----
@@ -117,12 +113,6 @@ class TablesViewerWindow(Gtk.ApplicationWindow):
 
         # 显示表格按钮
         self._populate_list(self.datalist)
-
-    # ---------- 组装标题/状态 ----------
-    def _make_title(self, query, datalist):
-        n = len(datalist) if datalist else 0
-        q = (query or "").strip() or "（未命名）"
-        return f"表格检索：{q}（共 {n} 项）"
     
     def _clear_box(self, box: Gtk.Box):
         """清空 box 子控件（GTK4 遍历）"""
@@ -411,29 +401,35 @@ class StylePropertyPage(PropertyPageBase):
 
     # open-show-images回调函数
     def _on_open_show_images(self, _button):
+        def _make_title(block_title, datalist):
+            return f"图片检索：{block_title} ('共{len(datalist)}项')"
+            
         # 取当前块的“名称”（如果有 subject 就优先用 subject.name）
-        title = getattr(getattr(self.subject, "subject", None), "name", None)
+        block_title = getattr(getattr(self.subject, "subject", None), "name", None)
         # 打开“图片展示”窗口
         tree = state.image_tree
-        datalist = utils.img_show.get_datalist_by_text(tree, title)
+        datalist = utils.img_show.get_datalist_by_text(tree, block_title)
         win = ImagesViewerWindow(
             parent_window=self.main_window.window,
             datalist=datalist,
-            query=title
+            title=_make_title(block_title, datalist)
         )
         win.present()
     
     # open-show-tables回调函数
     def _on_open_show_tables(self, _button):
-        title = getattr(getattr(self.subject, "subject", None), "name", None)
+        def _make_title(block_title, datalist):
+            return f"表格检索：{block_title} ('共{len(datalist)}项')"
+               
+        block_title = getattr(getattr(self.subject, "subject", None), "name", None)
         # 打开“表格展示”窗口
         tree = state.table_tree
-        datalist = utils.table_tree.get_datalist_by_text(tree, title)
+        datalist = utils.table_tree.get_datalist_by_text(tree, block_title)
         
         win = TablesViewerWindow(
             parent_window=self.main_window.window,
             datalist=datalist,
-            query=title
+            title=_make_title(block_title, datalist)
         )
         win.present()
     

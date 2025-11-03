@@ -231,3 +231,56 @@ flowboxchild:active {
   min-width: 20px;
   min-height: 20px;
 }
+
+/* === Search Area === */
+
+.search-entry {
+    border: 1px;
+    border-radius: 6px;
+    padding: 4px;
+    background: var(--window-bg-color);
+}
+/* 让滚动包裹的 TextView 看起来像“有边框的输入框” */
+scrolledwindow.search-entry {
+  /* 普通态边框 */
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--window-bg-color);
+}
+
+/* hover 提示 */
+scrolledwindow.search-entry:hover {
+  border-color: alpha(var(--fg-color), 0.35);
+}
+
+/* 当 TextView 获得焦点时，高亮整个输入框容器 */
+scrolledwindow.search-entry:focus-within {
+  border-color: var(--accent-bg-color);
+  box-shadow: 0 0 0 2px alpha(var(--accent-bg-color), 0.28);
+}
+
+/* 输入区内部的 TextView 外观：去掉自背景，用全局前景色 */
+scrolledwindow.search-entry textview {
+  background: transparent;
+  color: var(--window-fg-color);
+}
+
+/* TextView 文本/选区样式（避免主题过浅） */
+scrolledwindow.search-entry textview text {
+  background: transparent;
+  color: var(--window-fg-color);
+}
+scrolledwindow.search-entry textview text selection {
+  background-color: alpha(var(--accent-bg-color), 0.25);
+}
+
+/* 给 TextView 一点内边距（配合你在 Python 里设置的 top/bottom/left/right margin） */
+scrolledwindow.search-entry textview {
+  padding: 4px 6px;
+}
+
+/* 搜索按钮与输入框的上下距离&居中时的最小宽度（可按需调整） */
+button.search-run {
+  min-width: 96px;
+  margin-top: 6px;
+}

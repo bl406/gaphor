@@ -9,13 +9,14 @@ import os
 import asyncio
 from gaphor.ui import utils
 from gaphor.ui.utils import state
+from gaphor.diagram.styleeditor import TablesViewerWindow, ImagesViewerWindow
 
 from importlib.resources import files
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 
-from gi.repository import Adw, Gio, Gtk
+from gi.repository import Adw, Gio, Gtk, Gdk
 
 import gaphor.storage as storage
 from gaphor.abc import ActionProvider, Service
@@ -482,6 +483,16 @@ class FileManager(Service, ActionProvider):
                 window=self.parent_window,
             )
     
+    @action(name="open-acsemai")
+    async def action_open_acsemai(self):
+        title = "AcsemAI智能搜索模型"
+        win = AcsemAIWindow(
+            parent_window=self.main_window.window,
+            title=title
+        )
+        win.present()
+        pass
+        
     @event_handler(SessionCreated)
     async def _on_session_created(self, event: SessionCreated) -> None:
         if event.filename:
@@ -561,3 +572,93 @@ async def save_changes_before_close_dialog(window: Gtk.Window) -> str:
     window.present()
 
     return str(await dialog.choose(window))
+
+class AcsemAIWindow(Gtk.ApplicationWindow):
+    def __init__(self, parent_window: Gtk.Window, title):
+        super().__init__(title=title)
+        if parent_window:
+            self.set_transient_for(parent_window)
+        self.set_default_size(440, 275)
+        self.parent_window = parent_window
+
+        # ---- 顶层布局：垂直 Box ----
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        root.set_margin_top(8); root.set_margin_bottom(8)
+        root.set_margin_start(10); root.set_margin_end(10)
+        self.set_child(root)
+
+        # ========== 顶部：输入+按钮（整体居中） ==========
+        controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        controls.set_halign(Gtk.Align.CENTER)   # ⭐ 整组居中
+        controls.set_valign(Gtk.Align.START)
+
+        # 输入框放在一个专用的滚动容器里（长文本时滚动）
+        self.input_view = Gtk.TextView()
+        self.input_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)   # 自动换行
+        self.input_view.set_top_margin(6)
+        self.input_view.set_bottom_margin(6)
+        self.input_view.set_left_margin(8)
+        self.input_view.set_right_margin(8)
+        self.input_view.add_css_class("search-entry") 
+
+        self.input_scrolled = Gtk.ScrolledWindow()
+        self.input_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)  # 只纵向滚
+        self.input_scrolled.add_css_class("search-entry")  
+        self.input_scrolled.set_child(self.input_view)
+        # 设定一个“视觉上合适”的宽高（固定高度，超出就滚动）
+        self.input_scrolled.set_size_request(350, 180)
+        
+        # 执行按钮
+        run_btn = Gtk.Button(label="搜索")
+        # run_btn.add_css_class("suggested-action")
+        run_btn.add_css_class("search-run")  # 命中上面的 button.search-run
+        run_btn.connect("clicked", self._on_run_clicked)
+        
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", self._on_input_key_pressed)
+        self.input_view.add_controller(key)
+
+        controls.append(self.input_scrolled)
+        controls.append(run_btn)
+        root.append(controls)
+        
+    # 读取输入文本的小工具
+    def _get_input_text(self) -> str:
+        buf = self.input_view.get_buffer()
+        start, end = buf.get_bounds()
+        return buf.get_text(start, end, True)
+
+    # 点击“执行”后的行为（你在这里写调用逻辑）
+    def _on_run_clicked(self, _button):
+        text = self._get_input_text().strip()
+        # TODO: 用 text 做你的检索/生成，然后把结果渲染到 self.box
+        # 向大模型查询结果
+        image_results, table_results = utils.Acsemai.get_research(text)
+        
+        image_win_title = f"智能检索到相关图片：共{len(image_results)}项"
+        table_win_title = f"智能检索到相关表格：共{len(table_results)}项"
+        
+        win_table = TablesViewerWindow(
+            parent_window=self.parent_window,
+            datalist=table_results,
+            title=table_win_title
+        )
+        win_table.present()
+        
+        win_image = ImagesViewerWindow(
+            parent_window=self.parent_window,
+            datalist=image_results,
+            title=image_win_title
+        )
+        win_image.present()
+        
+        print("[AcsemAIWindow] run with:", text)
+        
+    # 回车执行
+    def _on_input_key_pressed(self, controller, keyval, keycode, state):
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self._on_run_clicked(None)
+            # ✅ 返回 True 表示我们处理了这个按键，
+            # TextView 不应该继续接收这一回车（避免换行）
+            return True
+        return False
