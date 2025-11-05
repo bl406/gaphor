@@ -677,19 +677,24 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
         image_win_title = f"智能检索到相关图片：共{len(image_results)}项"
         table_win_title = f"智能检索到相关表格：共{len(table_results)}项"
         
-        win_table = TablesViewerWindow(
-            parent_window=self.parent_window,
-            datalist=table_results,
-            title=table_win_title
-        )
-        win_table.present()
+        # 根据text对内容做mask
+        searcch_image, search_table = self._maskSearchResult(text)
         
-        win_image = ImagesViewerWindow(
-            parent_window=self.parent_window,
-            datalist=image_results,
-            title=image_win_title
-        )
-        win_image.present()
+        if searcch_image:
+            win_image = ImagesViewerWindow(
+                parent_window=self.parent_window,
+                datalist=image_results,
+                title=image_win_title
+            )
+            win_image.present()
+        
+        if search_table:
+            win_table = TablesViewerWindow(
+                parent_window=self.parent_window,
+                datalist=table_results,
+                title=table_win_title
+            )
+            win_table.present()
         
         print("[AcsemAIWindow] run with:", text)
         
@@ -701,3 +706,13 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
             # TextView 不应该继续接收这一回车（避免换行）
             return True
         return False
+    
+    @staticmethod
+    def _maskSearchResult(text):
+        searcch_image = True
+        search_table = True
+        if "表" in text and "图" not in text:
+            searcch_image = False
+        elif "图" in text and "表" not in text:
+            search_table = False
+        return searcch_image, search_table

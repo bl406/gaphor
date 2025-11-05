@@ -41,6 +41,7 @@ class ImagesViewerWindow(Gtk.Window):
 
         # === 逐条渲染：图片 + 描述 ===
         for tup in datalist:
+            
             tag, img_bytes, caption, img_id = tup
 
             # 将 bytes 转换为 Gdk.Texture（无须 GdkPixbuf）
