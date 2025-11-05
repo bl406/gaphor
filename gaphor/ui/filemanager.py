@@ -481,7 +481,7 @@ class FileManager(Service, ActionProvider):
 
         #选择文档
         open_path = await open_file_dialog(
-            gettext("选择要格式化的文档"),
+            gettext("选择要格式标准化的文档"),
             self.parent_window,
             dirname=dir_path_str if self.filename else None,
             filters=word_FILTER,
@@ -502,7 +502,7 @@ class FileManager(Service, ActionProvider):
         print(open_path)
         print(open_path.stem + "_formatted.docx")
         save_path = await save_file_dialog(
-            gettext("保存格式化后的文档"),
+            gettext("保存格式标准化后的文档"),
             Path(open_path.parent, open_path.stem + "_formatted.docx"),
             parent=self.parent_window,
             filters=word_FILTER,
@@ -517,7 +517,7 @@ class FileManager(Service, ActionProvider):
             # 例如：await self._export_model_to_word(src_path, dst_path)
         except Exception as e:
             await error_dialog(
-                message=gettext("格式化失败"),
+                message=gettext("格式标准化失败"),
                 secondary_message=str(e),
                 window=self.parent_window,
             )
