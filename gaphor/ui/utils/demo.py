@@ -7,21 +7,18 @@ from gaphor.ui.utils import img_show_ayf as img_show
 from gaphor.ui.utils import table_tree_ayf as table_tree
 import unicodedata
 import requests
+from importlib.resources import files
 
-# =========================
-# 配置区
-# =========================
-MODEL_PATH = "/hdd1/xz/models/DeepSeek-R1-Distill-Qwen-14B/"
-DOCX_PATH = "/hdd2/ayf/ayf_code/acdm/utils/载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx"
-DEVICE_ID = 1  # 使用 CUDA:1
-MAX_NEW_TOKENS = 1024
-TOP_P = 0.9
-TEMPERATURE = 0.4
-
-API_BASE = "http://172.17.140.239:8000" 
-
+def get_api():
+    api_url_file_config = files("gaphor.ui.utils").joinpath("api_url_config.json")
+    with open(api_url_file_config,'r', encoding='UTF-8') as f:
+        load_dict = json.load(f)
+    base = load_dict["url"]
+    post_target = load_dict["target"]
+    return f"{base}/{post_target}"
+    
 def call_api_extract_keywords(user_query: str):
-    url = f"{API_BASE}/extract_keywords"
+    url = get_api()
     try:
         resp = requests.post(url, json={"query": user_query}, timeout=60)
         resp.raise_for_status()
@@ -78,9 +75,6 @@ def fetch_from_trees(q: str):
     """
     用单个子串 q 分别在 image_tree / table_tree 下检索（安全版）。
     """
-    # 保证已初始化（如果你在 run_once 里已经 init 过，这里就不会重复构建）
-    if getattr(state, "image_tree", None) is None or getattr(state, "table_tree", None) is None:
-        init_trees(DOCX_PATH)
     img = []
     tbl = []
     try:
