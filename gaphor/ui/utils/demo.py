@@ -22,7 +22,6 @@ def call_api_extract_keywords(user_query: str):
         resp = requests.post(url, json={"query": user_query}, timeout=60)
         resp.raise_for_status()
         obj = resp.json()
-        # 返回格式：{"keywords":[...], "sections":[...], "synonyms":[...]}
         return obj
     except Exception as e:
         print(f"⚠️ 调用远程关键词服务失败：{e}")
@@ -210,7 +209,8 @@ def run_once(user_query: str):
     queries.extend(plan.get("sections", []))
     queries.extend(plan.get("synonyms", []))
     # 去重并过滤太短的词（避免大量误匹配）
-    queries = [q for q in unique_keep_order(queries, key=lambda s: s) if len(q.strip()) >= 2]
+    black_names = ["测试", "数据", "特性"]
+    queries = [q for q in unique_keep_order(queries, key=lambda s: s) if q.strip() not in black_names]
     
     print("\n=== 开始检索 ===")
     print(queries)
@@ -243,19 +243,14 @@ def _build_queries_from_api_or_fallback(text: str) -> list[str]:
     queries.extend(plan.get("sections", []))
     queries.extend(plan.get("synonyms", []))
     # 去重 + 过滤太短
-    queries = [q for q in unique_keep_order(queries, key=lambda s: s) if len(q.strip()) >= 2]
+    black_names = ["测试", "数据", "特性"]
+    queries = [q for q in unique_keep_order(queries, key=lambda s: s) if q.strip() not in black_names]
     return queries
 
 def get_research(text: str):
-    """
-    返回 (image_list, table_list)
-    其中：
-      image_list: List[('image', blob, caption)]
-      table_list: List[('table', wcTable, caption)]
-    满足你下游的拆分/取字段逻辑。
-    """
 
     queries = _build_queries_from_api_or_fallback(text)
+    print(f"[AcsemAIWindow] search with:{queries}")
     raw_img, raw_tbl = search_by_queries_raw(queries)
 
     # 转成三元组（去掉 idx）
