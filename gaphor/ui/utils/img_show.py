@@ -62,7 +62,7 @@ def find_node_place(node, parent):
 
 def extract_images_with_captions(doc_path):
     """
-    找所有 inline 图片，并取下一段作为图注（若匹配）
+    找所有 inline 图片，并取下两段作为图注（若匹配）
     返回 list[(PIL.Image, caption_text)]
     """
     doc = Document(doc_path)
@@ -80,7 +80,7 @@ def extract_images_with_captions(doc_path):
     
     while i < len(paras):
         p = paras[i]
-        outlinelevel = get_outline_level_of_style(doc.styles[p.style.style_id])
+        outlinelevel = get_outline_level_of_style(p.style)
 
         if outlinelevel != 10:
             #为标题，构建节点
@@ -100,7 +100,7 @@ def extract_images_with_captions(doc_path):
         if imgs:
             caption = ""
             j = i + 1
-            while j < len(paras):
+            while j < len(paras) and j <= i + 2:
                 txt = (extract_para_text_all(paras[j]._p.xml) or "").strip()
                 if not txt:
                     j += 1
@@ -108,7 +108,9 @@ def extract_images_with_captions(doc_path):
 
                 if RE_FIGCAP_APPX.match(txt) or RE_FIGCAP_NUM.match(txt):
                     caption = txt
-                break
+                    break
+                
+                j += 1
 
             for img in imgs:
                 # 如果要分index和caption文本：就启用下面的
@@ -141,7 +143,7 @@ def _extract_images_with_captions(doc_path):
     
     while i < len(paras):
         p = paras[i]
-        outlinelevel = get_outline_level_of_style(doc.styles[p.style.style_id])
+        outlinelevel = get_outline_level_of_style(p.style)
 
         if outlinelevel != 10:
             #为标题，构建节点
@@ -368,7 +370,7 @@ def print_tree(node, indent=0):
 
 
 if __name__ == "__main__":
-    tree = Create_image_tree(r"D:\Study\本子\文档识别生成\para_new\载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx")
+    tree = Create_image_tree(r"F:\五院项目\典型元器件应用验证指南的模型库\航天器用半导体集成电路BQR7K325TARAB900型抗辐照SRAM型FPGA应用指南\航天器用半导体集成电路BQR7K325TARAB900型抗辐照SRAM型FPGA应用指南.acbin")
     datalist = get_datalist_by_text(tree, "器件概况")
     print_tree(tree)
     print("ok")

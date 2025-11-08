@@ -14,8 +14,7 @@ def get_api():
     with open(api_url_file_config,'r', encoding='UTF-8') as f:
         load_dict = json.load(f)
     base = load_dict["url"]
-    post_target = load_dict["target"]
-    return f"{base}/{post_target}"
+    return f"{base}/{load_dict["search"]}"
     
 def call_api_extract_keywords(user_query: str):
     url = get_api()
@@ -199,7 +198,6 @@ def search_by_queries(queries: List[str]) -> Tuple[List[str], List[str]]:
 # 主流程
 # =========================
 def run_once(user_query: str):
-    init_trees(DOCX_PATH)
 
     print("\n=== 生成检索关键词(JSON) - via API ===")
     plan = call_api_extract_keywords(user_query)

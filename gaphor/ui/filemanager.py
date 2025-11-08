@@ -530,7 +530,6 @@ class FileManager(Service, ActionProvider):
             title=title
         )
         win.present()
-        pass
         
     @event_handler(SessionCreated)
     async def _on_session_created(self, event: SessionCreated) -> None:
@@ -614,9 +613,12 @@ async def save_changes_before_close_dialog(window: Gtk.Window) -> str:
 
 class AcsemAIWindow(Gtk.ApplicationWindow):
     def __init__(self, parent_window: Gtk.Window, title):
-        super().__init__(title=title)
+        app = parent_window.get_application() if parent_window else None
+
+        super().__init__(application=app, title=title)
         if parent_window:
             self.set_transient_for(parent_window)
+
         self.set_default_size(440, 275)
         self.parent_window = parent_window
 

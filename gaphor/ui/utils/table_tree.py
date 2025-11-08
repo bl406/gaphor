@@ -30,6 +30,14 @@ class wcTable:
             table.append(row)
         return table
     
+    def to_csv(self):
+        csv = ""
+        for row in self.table_content:
+            for cell in row:
+                csv += ("\"" + cell.to_csv_cell() + "\",") * cell.grid_span
+            csv = csv[:-1] + "\n"
+        return csv
+    
     def set_cell_text(self, r, c, text):
         self.table_content[r][c].text = text
         
@@ -46,6 +54,10 @@ class wcCell:
         
     def _get_cell_text(self):
         return self.cell.text
+    
+    def to_csv_cell(self):
+        return self.text.replace("\"", "\"\"").replace("\n", "")
+    
    
 # === 与 img_show.py 对齐的工具函数（同名/同义） ===
 def get_outline_level_of_style(style):
@@ -227,7 +239,7 @@ def Create_table_tree(doc_path: str):
         if kind == 'p':
             para_idx += 1
             p: Paragraph = obj
-            lvl = get_outline_level_of_style(doc.styles[p.style.style_id])
+            lvl = get_outline_level_of_style(p.style)
             if lvl != 10:
                 node = {
                     'text': p.text,
@@ -275,7 +287,7 @@ def get_datalist_by_text(table_tree, txt):
 
 # === 简单测试 ===
 if __name__ == "__main__":
-    path = "./gaphor/ui/utils/载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx"
+    path = r"E:\Gaphor\gaphor\gaphor\ui\utils\others\载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx"
     tree = Create_table_tree(path)
     dl = get_datalist_by_text(tree, "")
     # dl 形如：[("table", wcTable实例, caption, table_index), ...]

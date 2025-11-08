@@ -79,7 +79,7 @@ def extract_images_with_captions(doc_path):
         p = paras[i]
         # 修复弃用；用样式名而非 style_id
         try:
-            outlinelevel = get_outline_level_of_style(doc.styles[p.style.name])
+            outlinelevel = get_outline_level_of_style(p.style)
         except Exception:
             outlinelevel = 10
 
@@ -332,14 +332,18 @@ def get_datalist_by_text(image_tree, txt):
 
 # ============== 其他小工具 ==============
 
-def get_outline_level_of_style(style):
+def get_outline_level_of_style(style, para):
     try:
-        if style.element.pPr.outlineLvl is not None:
-            return style.element.pPr.outlineLvl.val + 1
-        else:
-            return get_outline_level_of_style(style.base_style)
+        if para._element.pPr.outlineLvl.val:
+            return para._element.pPr.outlineLvl.val + 1
     except:
-        return 10
+        try:
+            if style.element.pPr.outlineLvl:
+                return style.element.pPr.outlineLvl.val + 1
+            else:
+                return get_outline_level_of_style(style.base_style, None)
+        except:
+            return 10
 
 def build_outline_tree(items):
     if not items:

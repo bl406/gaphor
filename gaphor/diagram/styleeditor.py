@@ -16,7 +16,7 @@ from gaphor.transaction import Transaction
 from importlib.resources import files
 
 from gaphor.ui import utils
-from gaphor.ui.utils import state
+from gaphor.ui.utils import state, Acsemai
 from gaphor.ui.utils.table_tree import wcTable
 from docx import Document
 
@@ -165,7 +165,7 @@ class TablesViewerWindow(Gtk.ApplicationWindow):
         # 3) 打开编辑窗口（标题可带表名）
         title = f"表格编辑：{caption}"
         win = TableEditorWindow(
-            parent_window=parent,
+            parent_window=self,
             wc_table=wct,
             table_index=int(tbl_index),
             docx_path=docx_path,
@@ -210,7 +210,7 @@ class TableEditorWindow(Gtk.ApplicationWindow):
         self.docx_path = docx_path
         self.table_index = table_index
         self.doc = None               # 当前 Document
-        self.wct: "wcTable" = None    # 当前 wcTable（与 self.doc 对应）
+        self.wct: "wcTable" = wc_table    # 当前 wcTable（与 self.doc 对应）
         self.grid: Gtk.Grid = None
         self.patches = {}             # {cell_id: new_text}
         self.id_to_cell = {}          # {cell_id: python-docx _Cell}
@@ -221,17 +221,21 @@ class TableEditorWindow(Gtk.ApplicationWindow):
         root.set_margin_start(10); root.set_margin_end(10)
         self.set_child(root)
 
-        # 顶部工具条（保存 / 重建）
+        # 顶部工具条（保存 / 重建 / AI）
         btn_save = Gtk.Button(label="保存回 DOCX")
-        btn_save.add_css_class("suggested-action")
         btn_save.connect("clicked", self._on_save_clicked)
 
         btn_rebuild = Gtk.Button(label="重建（从文件重载）")
         btn_rebuild.connect("clicked", self._on_rebuild_clicked)
+        
+        btn_Acsemai = Gtk.Button(label="打开 AcsemAI 智能问答模型")
+        btn_Acsemai.add_css_class("suggested-action")
+        btn_Acsemai.connect("clicked", self._on_Acsemai_clicked)
 
         topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         topbar.append(btn_save)
         topbar.append(btn_rebuild)
+        topbar.append(btn_Acsemai)
         root.append(topbar)
 
         # 表格滚动区
@@ -339,7 +343,122 @@ class TableEditorWindow(Gtk.ApplicationWindow):
         self.wct = wcTable(self.doc.tables[self.table_index], self.table_index)
         self._build_grid_from_wct()
         print("🔁 已从文件重载并重建 UI")
+        
+    def _on_Acsemai_clicked(self, _btn):
+        title = "AcsemAI 智能问答模型"
+        win = AcsemAITableChatWindow(
+            parent_window=self,
+            title=title,
+            table = self.wct
+        )
+        win.present()
+        
+class AcsemAITableChatWindow(Gtk.ApplicationWindow):
+    def __init__(self, parent_window: Gtk.Window, title, table):
+        app = parent_window.get_application()
+        super().__init__(application=app, title=title)
+        if parent_window:
+            self.set_transient_for(parent_window)
+        self.set_default_size(440, 275)
+        self.parent_window = parent_window
+        self.wct = table
 
+        # ---- 顶层布局：垂直 Box ----
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        root.set_margin_top(8); root.set_margin_bottom(8)
+        root.set_margin_start(10); root.set_margin_end(10)
+        self.set_child(root)
+
+        # ========== 顶部：输入+按钮（整体居中） ==========
+        controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        controls.set_halign(Gtk.Align.CENTER)   # ⭐ 整组居中
+        controls.set_valign(Gtk.Align.START)
+
+        # 输入框放在一个专用的滚动容器里（长文本时滚动）
+        self.input_view = Gtk.TextView()
+        self.input_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)   # 自动换行
+        self.input_view.set_top_margin(6)
+        self.input_view.set_bottom_margin(6)
+        self.input_view.set_left_margin(8)
+        self.input_view.set_right_margin(8)
+        self.input_view.add_css_class("search-entry") 
+
+        self.input_scrolled = Gtk.ScrolledWindow()
+        self.input_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)  # 只纵向滚
+        self.input_scrolled.add_css_class("search-entry")  
+        self.input_scrolled.set_child(self.input_view)
+        # 设定一个“视觉上合适”的宽高（固定高度，超出就滚动）
+        self.input_scrolled.set_size_request(350, 100)
+        
+        # 输出框放在一个专用的滚动容器里（长文本时滚动）
+        self.output_view = Gtk.TextView()
+        self.output_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)   # 自动换行
+        self.output_view.set_top_margin(6)
+        self.output_view.set_bottom_margin(6)
+        self.output_view.set_left_margin(8)
+        self.output_view.set_right_margin(8)
+        self.output_view.add_css_class("search-entry") 
+
+        self.output_scrolled = Gtk.ScrolledWindow()
+        self.output_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)  # 只纵向滚
+        self.output_scrolled.add_css_class("search-entry")  
+        self.output_scrolled.set_child(self.output_view)
+        # 设定一个“视觉上合适”的宽高（固定高度，超出就滚动）
+        self.output_scrolled.set_size_request(350, 250)
+        
+        # 执行按钮
+        run_btn = Gtk.Button(label="发送")
+        run_btn.add_css_class("search-run")
+        run_btn.connect("clicked", self._on_run_clicked)
+        
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", self._on_input_key_pressed)
+        self.input_view.add_controller(key)
+
+        controls.append(self.input_scrolled)
+        controls.append(self.output_scrolled)
+        controls.append(run_btn)
+        root.append(controls)
+        
+    # 读取输入文本
+    def _get_input_text(self) -> str:
+        buf = self.input_view.get_buffer()
+        start, end = buf.get_bounds()
+        return buf.get_text(start, end, True)
+
+    # 写入结果文本
+    def set_output_text(self, text: str):
+        buf = self.output_view.get_buffer()
+        buf.set_text(text)
+
+    # 点击“执行”后的行为
+    def _on_run_clicked(self, _button):
+        text = self._get_input_text().strip()
+        print("[AcsemAIWindow] run with:", text)
+        result = Acsemai.table_chat(text, self.wct)
+        print("[AcsemAIWindow] answer as:", result)
+        self.set_output_text(result)
+        return 
+    
+    # 回车执行
+    def _on_input_key_pressed(self, controller, keyval, keycode, state):
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self._on_run_clicked(None)
+            # ✅ 返回 True 表示我们处理了这个按键，
+            # TextView 不应该继续接收这一回车（避免换行）
+            return True
+        return False
+    
+    @staticmethod
+    def _maskSearchResult(text):
+        searcch_image = True
+        search_table = True
+        if "表" in text and "图" not in text:
+            searcch_image = False
+        elif "图" in text and "表" not in text:
+            search_table = False
+        return searcch_image, search_table
+    
 @PropertyPages.register(Presentation)
 class StylePropertyPage(PropertyPageBase):
     """A button to open a easy-to-use CSS editor."""

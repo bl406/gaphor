@@ -9,45 +9,8 @@ from docx.oxml.ns import qn
 import re
 import unicodedata
 
-#=====Table类型定义=====#
-class wcTable:
-    def __init__(self, tbl, table_index, caption=""):
-        self._tbl = tbl
-        self._rows = len(tbl.rows)
-        self._cols = len(tbl.columns)
-        self.table_index = table_index
-        self.table_content = self._build_table()
-        self.table_caption = caption
-        
-    def _build_table(self):
-        table = []
-        for r_index in range(len(self._tbl.rows)):
-            row = []
-            for c_index in range(len(self._tbl.row_cells(r_index))):
-                cell = self._tbl.row_cells(r_index)[c_index]
-                if c_index and cell._tc is self._tbl.row_cells(r_index)[c_index - 1]._tc:
-                    continue
-                row.append(wcCell(cell, grid_span=cell.grid_span, cell_index=(self.table_index, r_index, c_index)))
-            table.append(row)
-        return table
-    
-    def set_cell_text(self, r, c, text):
-        self.table_content[r][c].text = text
-        
-    def __getitem__(self, index):
-        return self.table_content[index]
-    
-class wcCell:
-    def __init__(self, cell, grid_span=1, cell_index=None):
-        self.cell = cell
-        self.grid_span = grid_span
-        self._index = cell_index
-        self.title = f"t{self._index[0]}_r{self._index[1]}_c{self._index[2]}"
-        self.text = self._get_cell_text()
-        
-    def _get_cell_text(self):
-        return self.cell.text
-   
+from gaphor.ui.utils.table_tree import wcCell, wcTable
+
 # === 与 img_show.py 对齐的工具函数（同名/同义） ===
 def _norm_text(s: str) -> str:
     if not isinstance(s, str):
@@ -275,7 +238,7 @@ def Create_table_tree(doc_path: str):
         if kind == 'p':
             para_idx += 1
             p: Paragraph = obj
-            lvl = get_outline_level_of_style(doc.styles[p.style.style_id])
+            lvl = get_outline_level_of_style(p.style)
             if lvl != 10:
                 node = {
                     'text': p.text,
