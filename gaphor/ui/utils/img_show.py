@@ -1,6 +1,7 @@
 from docx import Document
 from docx.oxml.ns import qn
 import re
+from gaphor.ui.utils.table_tree import get_datalist_by_text
 
 RE_FIGCAP_APPX  = re.compile(r"^\s*(图|Fig\.?|Figure)\s*[A-ZＡ-Ｚ]\s*[\.\．]\s*\d+(?:[-．\.]\d+)*", re.I)
 RE_FIGCAP_NUM   = re.compile(r"^\s*(图|Fig\.?|Figure)\s*[：:\.]?\s*\d+(?:[-．\.]\d+)*", re.I)
@@ -278,15 +279,15 @@ def find_node_by_text(node, txt):
             return result
     return None
 
-def get_datalist_by_text(image_tree, txt):
-    # 收集txt下的所有data
-    if not txt:
-        return collect_data_from_node(image_tree)
+# def get_datalist_by_text(image_tree, txt):
+#     # 收集txt下的所有data
+#     if not txt:
+#         return collect_data_from_node(image_tree)
     
-    node = find_node_by_text(image_tree, txt)
-    if not node:
-        return []
-    return collect_data_from_node(node)
+#     node = find_node_by_text(image_tree, txt)
+#     if not node:
+#         return []
+#     return collect_data_from_node(node)
     
 def get_outline_level_of_style(style):
     try:
@@ -370,7 +371,7 @@ def print_tree(node, indent=0):
 
 
 if __name__ == "__main__":
-    tree = Create_image_tree(r"F:\五院项目\典型元器件应用验证指南的模型库\航天器用半导体集成电路BQR7K325TARAB900型抗辐照SRAM型FPGA应用指南\航天器用半导体集成电路BQR7K325TARAB900型抗辐照SRAM型FPGA应用指南.acbin")
+    tree = Create_image_tree(r"E:\Gaphor\gaphor\gaphor\ui\utils\others\载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx")
     datalist = get_datalist_by_text(tree, "器件概况")
     print_tree(tree)
     print("ok")

@@ -4,12 +4,15 @@ import json
 from typing import Dict, List, Optional
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, Qwen2_5_VLForConditionalGeneration
+from io import BytesIO
+from PIL import Image
 
 # ====== 配置 ======
-MODEL_PATH = "/hdd1/xz/models/DeepSeek-R1-Distill-Qwen-14B/"
+# MODEL_PATH = "/hdd1/xz/models/DeepSeek-R1-Distill-Qwen-14B/"
+MODEL_PATH = "/hdd1/xz/models/Qwen2.5-VL-7B-Instruct/"
 DEVICE_ID = 1                    # 使用 CUDA:1
 MAX_NEW_TOKENS = 1024
 TOP_P = 0.9
@@ -38,9 +41,10 @@ PROMPT_GPT = """你是“术语分解器”。任务：把中文用户输入分�
 1) 去掉：请、帮我、一下、相关、的、一下、一下子、给我、能否、可以等功能词。
 2) 保留领域名词与概念（如：元器件、电特性、反向漏电流、图表、参数、曲线、数据、测试）。
 3) 复合词既保留整体，也拆基础成分：
-   - 图表 → 图表，图，表
    - 曲线图 → 曲线图，曲线，图
    - 参数表 → 参数表，参数，表
+   - 元器件温度 → 元器件温度，元器件，温度
+   - 温度特性 → 温度特性，温度
 4) 去重，按重要性从大到小排列（领域核心词在前）。
 5) 仅以 JSON 数组输出，不要其他文字例如:{{\"keywords\": [\"k1\",\"k2\", ...]}}
 <用户输入>{query}</用户输入>
@@ -55,30 +59,48 @@ class ExtractReq(BaseModel):
 class TableChatReq(BaseModel):
     prompt: str
 
+class ImageChatReq(BaseModel):
+    prompt: str
+    image_blob: Optional[str] = None
+    
+class ALLChatReq(BaseModel):
+    prompt: str
+    image_blobs: List[str] = None
+
 class ExtractResp(BaseModel):
     keywords: List[str]
     sections: List[str]
     synonyms: List[str]
 
 tokenizer: Optional[AutoTokenizer] = None
+processor: Optional[AutoProcessor] = None
 model: Optional[AutoModelForCausalLM] = None
 
 @app.on_event("startup")
 def load_model_once():
-    global tokenizer, model
+    global tokenizer, processor, model
     print(f"--- Loading model {MODEL_PATH} to CUDA:{DEVICE_ID} ---")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_PATH,
-        torch_dtype=torch.float16,
-        device_map={"": DEVICE_ID},
-        trust_remote_code=True,
-    )
+    processor = AutoProcessor.from_pretrained(MODEL_PATH, trust_remote_code=True)
+    if "DeepSeek-R1-Distill-Qwen-14B" in MODEL_PATH:
+        model = AutoModelForCausalLM.from_pretrained(
+            MODEL_PATH,
+            torch_dtype=torch.float16,
+            device_map={"": DEVICE_ID},
+            trust_remote_code=True,
+        )
+    else:
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            MODEL_PATH,
+            torch_dtype=torch.float16,
+            device_map={"": DEVICE_ID},
+            trust_remote_code=True,
+        )
     model.eval()
     print("--- Model ready ---")
     
 @app.post("/table_chat")
-def table_chat_sever(req: TableChatReq):
+def table_chat_server(req: TableChatReq):
     assert model is not None and tokenizer is not None, "model not ready"
     prompt = req.prompt
     inputs = tokenizer(prompt, return_tensors="pt").to(f"cuda:{DEVICE_ID}")
@@ -92,6 +114,77 @@ def table_chat_sever(req: TableChatReq):
         )
     text = tokenizer.decode(out[0], skip_special_tokens=True).strip()
     return text
+
+@app.post("/img_chat")
+def img_chat_server(req: ImageChatReq):
+    assert model is not None and processor is not None, "model not ready"
+
+    pil_image = None
+    if req.image_blob:
+        try:
+            pil_image = Image.open(BytesIO(req.image_blob.encode("latin1"))).convert("RGB")
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid image bytes")
+    content = []
+    if pil_image is not None:
+        content.append({"type": "image", "image": pil_image})   # 多图就 append 多次
+    content.append({"type": "text", "text": req.prompt or ""})
+    messages = [{"role": "user", "content": content}]
+    text_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+    
+    inputs = processor(text=[text_prompt], images=[pil_image], padding=True, return_tensors="pt").to(f"cuda:{DEVICE_ID}")
+
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=True,
+            top_p=TOP_P,
+            temperature=TEMPERATURE,
+        )
+        
+    # 仅取新生成部分
+    input_len = inputs["input_ids"].shape[1]
+    text = processor.tokenizer.decode(out[0][input_len:], skip_special_tokens=True).strip()
+    return text
+
+@app.post("/all_chat")
+def all_chat_server(req: ALLChatReq):
+    assert model is not None and processor is not None, "model not ready"
+
+    pil_images = []
+    if req.image_blobs:
+        for idx, blob in enumerate(req.image_blobs):
+            try:
+                pil_images.append(Image.open(BytesIO(blob.encode("latin1"))).convert("RGB"))
+            except Exception as e:
+                print(e)
+                print(f"第{idx}张图片损坏，无法提取")
+    content = []
+    print(f"是否有PIL图片：{bool(pil_images)}")
+    if pil_images:
+        for idx, image in enumerate(pil_images):
+            content.append({f"type": "image", "image": image})   # 多图就 append 多次
+            
+    content.append({"type": "text", "text": req.prompt or ""})
+    messages = [{"role": "user", "content": content}]
+    text_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+    
+    inputs = processor(text=[text_prompt], images=pil_images, padding=True, return_tensors="pt").to(f"cuda:{DEVICE_ID}")
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=True,
+            top_p=TOP_P,
+            temperature=TEMPERATURE,
+        )
+        
+    # 仅取新生成部分
+    input_len = inputs["input_ids"].shape[1]
+    text = processor.tokenizer.decode(out[0][input_len:], skip_special_tokens=True).strip()
+    return text
+
 
 def _extract_json(text: str) -> Dict[str, List[str]]:
     # 截取第一个 {...}

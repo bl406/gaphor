@@ -24,7 +24,8 @@ class ImagesViewerWindow(Gtk.Window):
     def __init__(self, parent_window: Gtk.Window, datalist, title: str):
         super().__init__(title=title)
         self.set_transient_for(parent_window)
-        self.set_default_size(900, 600)
+        self.set_default_size(350, 680)
+        self.datalist = datalist
 
         # 滚动容器（纵向滚动）
         scrolled = Gtk.ScrolledWindow()
@@ -39,37 +40,55 @@ class ImagesViewerWindow(Gtk.Window):
         scrolled.set_child(box)
         self.set_child(scrolled)
 
-        # === 逐条渲染：图片 + 描述 ===
-        for tup in datalist:
-            
-            tag, img_bytes, caption, img_id = tup
+        self.box = box
+        self._populate_list(self.datalist)
+        
+    def _populate_list(self, items):
+        """把 datalist 渲染为纵向的按钮列表；每个按钮显示 ImageCaption，点击回调."""
+        # self._clear_box(self._content_box)
+        if not items:
+            empty = Gtk.Label(label="未找到匹配的图片")
+            empty.set_xalign(0.0); empty.set_wrap(True)
+            self.box.append(empty)
+            return
 
-            # 将 bytes 转换为 Gdk.Texture（无须 GdkPixbuf）
-            texture = None
-            try:
-                texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(img_bytes))
-            except Exception:
-                # 跳过坏图
-                continue
+        for i, data in enumerate(items):
+            # data: ('table', wcTable, '表1 最大额定值', 0)
+            caption = str(data[2])
 
-            # 显示图片：用 Gtk.Picture，自动缩放不失真
-            picture = Gtk.Picture.new_for_paintable(texture)
-            picture.set_halign(Gtk.Align.CENTER)
-            picture.set_can_shrink(True)
-            picture.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
-            picture.set_size_request(200, 300)
-            box.append(picture)
+            btn = Gtk.Button(label=caption)
+            # 让按钮更紧凑/扁平（可选）
+            btn.add_css_class("pill")
+            btn.set_halign(Gtk.Align.FILL)
+            btn.set_hexpand(True)
+            btn.set_margin_start(20)
+            btn.set_margin_end(20)
 
-            # 显示描述（在图片下面）
-            text_parts = []
-            if isinstance(caption, str) and caption.strip():
-                text_parts.append(caption.strip())
-            text_parts.append(f"(ID: {img_id})")
-            label = Gtk.Label(label="  ".join(text_parts))
-            label.set_wrap(True)
-            label.set_xalign(0.0)
-            label.set_halign(Gtk.Align.CENTER)
-            box.append(label)
+            # 点击回调：把这条 data 原样传回去
+            def on_clicked(_b, payload=data):
+                self.on_item_activated(payload)
+
+            btn.connect("clicked", on_clicked)
+            self.box.append(btn)
+    
+    def on_item_activated(self, data):
+        """
+        data 形如: ('table', wcTable, '表1 最大额定值', table_index)
+        """
+        _kind, img, caption, img_index = data
+
+        # 1) 取应用 / 父窗
+        parent = self
+        app = parent.get_application() if parent else None
+
+        # 3) 打开编辑窗口（标题可带表名）
+        title = f"图片查看：{caption}"
+        win = ImageEditorWindow(
+            parent_window=self,
+            img_tup=data,
+            title=title
+            )
+        win.present()
 
 class TablesViewerWindow(Gtk.ApplicationWindow):
     """
@@ -352,6 +371,171 @@ class TableEditorWindow(Gtk.ApplicationWindow):
             table = self.wct
         )
         win.present()
+   
+class ImageEditorWindow(Gtk.ApplicationWindow):
+    def __init__(self, parent_window: Gtk.Window, img_tup, title: str = None):
+        app = parent_window.get_application() if parent_window else None
+        super().__init__(application=app, title=title or "图片查看")
+        if parent_window:
+            self.set_transient_for(parent_window)
+        self.set_default_size(1100, 720)
+
+        # ---- 状态 ----
+        # 期望 img_tup: (tag, img_bytes, caption, img_id)
+        self.tag, self.img_bytes, self.img_caption, self.img_id = img_tup
+        self._texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(self.img_bytes))
+        self._orig_w = self._texture.get_width()
+        self._orig_h = self._texture.get_height()
+        self._scale = 1.0
+        self._min_scale = 0.1
+        self._max_scale = 8.0
+
+        # ---- 顶层布局 ----
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        root.set_margin_top(8); root.set_margin_bottom(8)
+        root.set_margin_start(10); root.set_margin_end(10)
+        self.set_child(root)
+
+        # 顶部工具条
+        topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        root.append(topbar)
+
+        btn_ai = Gtk.Button(label="打开 AcsemAI 智能问答模型")
+        btn_ai.add_css_class("suggested-action")
+        btn_ai.connect("clicked", self._on_acsemai_clicked)
+        topbar.append(btn_ai)
+
+        topbar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
+        btn_zoom_out = Gtk.Button(label="−")
+        btn_zoom_out.set_tooltip_text("缩小 (Ctrl+滚轮下 / -)")
+        btn_zoom_out.connect("clicked", lambda _b: self._zoom_step(-0.1))
+        topbar.append(btn_zoom_out)
+
+        btn_zoom_in = Gtk.Button(label="+")
+        btn_zoom_in.set_tooltip_text("放大 (Ctrl+滚轮上 / +)")
+        btn_zoom_in.connect("clicked", lambda _b: self._zoom_step(+0.1))
+        topbar.append(btn_zoom_in)
+
+        btn_zoom_100 = Gtk.Button(label="100%")
+        btn_zoom_100.set_tooltip_text("实际尺寸 (0)")
+        btn_zoom_100.connect("clicked", lambda _b: self._set_scale(1.0))
+        topbar.append(btn_zoom_100)
+
+        btn_zoom_fit = Gtk.Button(label="适配")
+        btn_zoom_fit.set_tooltip_text("适配窗口")
+        btn_zoom_fit.connect("clicked", self._on_fit_clicked)
+        topbar.append(btn_zoom_fit)
+
+        # ---- 中部可滚动区 ----
+        self.scrolled = Gtk.ScrolledWindow()
+        self.scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.scrolled.set_size_request(800, 600)
+
+        # 内容：图片 + 说明标签（纵向）
+        self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.content_box.set_margin_top(12)
+        self.content_box.set_margin_bottom(12)
+        self.content_box.set_margin_start(12)
+        self.content_box.set_margin_end(12)
+        self.scrolled.set_child(self.content_box)
+        root.append(self.scrolled)
+
+        # 图片
+        self.picture = Gtk.Picture.new_for_paintable(self._texture)
+        self.picture.set_halign(Gtk.Align.CENTER)
+        self.picture.set_can_shrink(True)
+        self.picture.set_content_fit(Gtk.ContentFit.SCALE_DOWN)  # 初始：缩小以适配
+        # 先给一个合理的最小可见区域
+        self.picture.set_size_request(min(self._orig_w, 600), min(self._orig_h, 400))
+        self.content_box.append(self.picture)
+
+        # 说明文字
+        parts = []
+        if isinstance(self.img_caption, str) and self.img_caption.strip():
+            parts.append(self.img_caption.strip())
+        parts.append(f"(ID: {self.img_id})")
+        self.caption_label = Gtk.Label(label="  ".join(parts))
+        self.caption_label.set_wrap(True)
+        self.caption_label.set_xalign(0.5)
+        self.caption_label.set_halign(Gtk.Align.CENTER)
+        self.content_box.append(self.caption_label)
+
+        # ---- 键鼠缩放支持 ----
+        # Ctrl + 滚轮缩放
+        self._ctrl_scroller = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
+        self._ctrl_scroller.connect("scroll", self._on_scroll_zoom)
+        self.add_controller(self._ctrl_scroller)
+
+        # 键盘 +/-/0
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key)
+
+        # 初始尝试适配（等窗口布局稳定后再算）
+        GLib.idle_add(lambda: (self._fit_to_view(), False))
+
+    # ====== 行为 ======
+
+    def _on_acsemai_clicked(self, _btn):
+        title = "AcsemAI 智能问答模型"
+        win = AcsemAIImageChatWindow(
+            parent_window=self,
+            title=title,
+            image_blob=self.img_bytes,
+            image_caption=self.img_caption
+        )
+        win.present()
+
+    def _zoom_step(self, delta):
+        self._set_scale(self._scale * (1.0 + delta))
+
+    def _set_scale(self, s: float):
+        s = max(self._min_scale, min(self._max_scale, s))
+        self._scale = s
+        # 缩放通过调整 size_request 实现滚动查看
+        new_w = max(1, int(self._orig_w * self._scale))
+        new_h = max(1, int(self._orig_h * self._scale))
+        self.picture.set_content_fit(Gtk.ContentFit.FILL)  # 缩放时用尺寸驱动
+        self.picture.set_size_request(new_w, new_h)
+
+    def _fit_to_view(self):
+        # 根据当前可视区域估算一个“适配窗口”的缩放
+        alloc = self.scrolled.get_allocation()
+        view_w = max(1, alloc.width - 64)   # 留点边距，避免贴边
+        view_h = max(1, alloc.height - 120) # 顶部工具条 + 说明标签的空间
+        if view_w <= 0 or view_h <= 0:
+            return
+        scale_w = view_w / self._orig_w
+        scale_h = view_h / self._orig_h
+        self._set_scale(min(scale_w, scale_h))
+
+    def _on_fit_clicked(self, _btn):
+        self._fit_to_view()
+
+    def _on_scroll_zoom(self, controller, dx, dy):
+        # 仅当按住 Ctrl 时滚轮缩放；否则让滚动窗处理
+        # 说明：GTK4 在 key-pressed 里记录不到 Ctrl 状态给 scroll，所以简单做法：
+        # 用 Shift 反向也可：向上放大，向下缩小
+        if dy is None:
+            return False
+        # 这里无修饰键就直接做“自然缩放”：上滚放大，下滚缩小
+        if dy < 0:
+            self._zoom_step(+0.1)
+            return True
+        elif dy > 0:
+            self._zoom_step(-0.1)
+            return True
+        return False
+
+    def _on_key_pressed(self, _ctrl, keyval, _keycode, _state):
+        if keyval in (Gdk.KEY_plus, Gdk.KEY_KP_Add):
+            self._zoom_step(+0.1); return True
+        if keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+            self._zoom_step(-0.1); return True
+        if keyval in (Gdk.KEY_0, Gdk.KEY_KP_0):
+            self._set_scale(1.0); return True
+        return False
         
 class AcsemAITableChatWindow(Gtk.ApplicationWindow):
     def __init__(self, parent_window: Gtk.Window, title, table):
@@ -359,7 +543,7 @@ class AcsemAITableChatWindow(Gtk.ApplicationWindow):
         super().__init__(application=app, title=title)
         if parent_window:
             self.set_transient_for(parent_window)
-        self.set_default_size(440, 275)
+        self.set_default_size(840, 550)
         self.parent_window = parent_window
         self.wct = table
 
@@ -388,7 +572,7 @@ class AcsemAITableChatWindow(Gtk.ApplicationWindow):
         self.input_scrolled.add_css_class("search-entry")  
         self.input_scrolled.set_child(self.input_view)
         # 设定一个“视觉上合适”的宽高（固定高度，超出就滚动）
-        self.input_scrolled.set_size_request(350, 100)
+        self.input_scrolled.set_size_request(840, 100)
         
         # 输出框放在一个专用的滚动容器里（长文本时滚动）
         self.output_view = Gtk.TextView()
@@ -404,7 +588,7 @@ class AcsemAITableChatWindow(Gtk.ApplicationWindow):
         self.output_scrolled.add_css_class("search-entry")  
         self.output_scrolled.set_child(self.output_view)
         # 设定一个“视觉上合适”的宽高（固定高度，超出就滚动）
-        self.output_scrolled.set_size_request(350, 250)
+        self.output_scrolled.set_size_request(840, 450)
         
         # 执行按钮
         run_btn = Gtk.Button(label="发送")
@@ -449,16 +633,19 @@ class AcsemAITableChatWindow(Gtk.ApplicationWindow):
             return True
         return False
     
-    @staticmethod
-    def _maskSearchResult(text):
-        searcch_image = True
-        search_table = True
-        if "表" in text and "图" not in text:
-            searcch_image = False
-        elif "图" in text and "表" not in text:
-            search_table = False
-        return searcch_image, search_table
-    
+class AcsemAIImageChatWindow(AcsemAITableChatWindow):
+    def __init__(self, parent_window: Gtk.Window, title, image_blob, image_caption):
+        super().__init__(parent_window=parent_window, title=title, table=None)
+        self.image_tup = (image_blob, image_caption)
+    # 点击“执行”后的行为
+    def _on_run_clicked(self, _button):
+        text = self._get_input_text().strip()
+        print("[AcsemAIWindow] run with:", text)
+        result = Acsemai.image_chat(text, self.image_tup)
+        print("[AcsemAIWindow] answer as:", result)
+        self.set_output_text(result)
+        return 
+        
 @PropertyPages.register(Presentation)
 class StylePropertyPage(PropertyPageBase):
     """A button to open a easy-to-use CSS editor."""

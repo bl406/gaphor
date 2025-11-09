@@ -8,8 +8,8 @@ import tempfile
 import os
 import asyncio
 from gaphor.ui import utils
-from gaphor.ui.utils import state
-from gaphor.diagram.styleeditor import TablesViewerWindow, ImagesViewerWindow
+from gaphor.ui.utils import state, Acsemai
+from gaphor.diagram.styleeditor import AcsemAIImageChatWindow, AcsemAITableChatWindow, ImagesViewerWindow, ImageEditorWindow, TableEditorWindow, TablesViewerWindow
 
 from importlib.resources import files
 from collections.abc import Callable
@@ -650,17 +650,23 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
         self.input_scrolled.set_size_request(350, 180)
         
         # 执行按钮
+        self.run_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.run_btn_box.set_homogeneous(True)
         run_btn = Gtk.Button(label="搜索")
-        # run_btn.add_css_class("suggested-action")
         run_btn.add_css_class("search-run")  # 命中上面的 button.search-run
         run_btn.connect("clicked", self._on_run_clicked)
+        chat_btn = Gtk.Button(label="提问")
+        chat_btn.add_css_class("search-run")
+        chat_btn.connect("clicked", self._on_chat_clicked)
         
         key = Gtk.EventControllerKey()
         key.connect("key-pressed", self._on_input_key_pressed)
         self.input_view.add_controller(key)
 
+        self.run_btn_box.append(run_btn)
+        self.run_btn_box.append(chat_btn)
         controls.append(self.input_scrolled)
-        controls.append(run_btn)
+        controls.append(self.run_btn_box)
         root.append(controls)
         
     # 读取输入文本的小工具
@@ -671,8 +677,11 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
 
     # 点击“执行”后的行为（你在这里写调用逻辑）
     def _on_run_clicked(self, _button):
+        _, _ = self.run_action()
+        
+    def run_action(self):
         text = self._get_input_text().strip()
-        # TODO: 用 text 做你的检索/生成，然后把结果渲染到 self.box
+        self.text = text
         # 向大模型查询结果
         image_results, table_results = utils.Acsemai.get_research(text)
         
@@ -697,8 +706,21 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
                 title=table_win_title
             )
             win_table.present()
-        
+            
         print("[AcsemAIWindow] run with:", text)
+        return image_results, table_results
+        
+    def _on_chat_clicked(self, _button):
+        image_results, table_results = self.run_action()
+        #弹出相关搜索窗口后，准备问答界面
+        searcch_image, search_table = self._maskSearchResult(self.text)
+        if not searcch_image:
+            image_results=[]
+        if not search_table:
+            table_results=[]
+            
+        win = AcsemAIAllChatWindow(parent_window=self, title="AcsemAI 智能问答模型", image_results=image_results, table_results=table_results)
+        win.present()
         
     # 回车执行
     def _on_input_key_pressed(self, controller, keyval, keycode, state):
@@ -718,3 +740,19 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
         elif "图" in text and "表" not in text:
             search_table = False
         return searcch_image, search_table
+    
+class AcsemAIAllChatWindow(AcsemAITableChatWindow):
+    def __init__(self, parent_window, title, table=None, image_results=[], table_results=[]):
+        super().__init__(parent_window, title, table)
+        self.images = image_results
+        self.tables = table_results
+        
+        # 点击“执行”后的行为
+    def _on_run_clicked(self, _button):
+        text = self._get_input_text().strip()
+        print("[AcsemAIWindow] run with:", text)
+        result = Acsemai.all_chat(text, self.images, self.tables)
+        print("[AcsemAIWindow] answer as:", result)
+        self.set_output_text(result)
+        return 
+

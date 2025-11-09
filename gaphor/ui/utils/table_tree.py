@@ -8,6 +8,7 @@ from docx.oxml.table import CT_Tbl
 from docx.oxml.ns import qn
 import re
 
+
 #=====Table类型定义=====#
 class wcTable:
     def __init__(self, tbl, table_index, caption=""):
@@ -57,9 +58,7 @@ class wcCell:
     
     def to_csv_cell(self):
         return self.text.replace("\"", "\"\"").replace("\n", "")
-    
-   
-# === 与 img_show.py 对齐的工具函数（同名/同义） ===
+
 def get_outline_level_of_style(style):
     """有效大纲等级：自身->继承->无则10（正文）"""
     try:
@@ -69,7 +68,6 @@ def get_outline_level_of_style(style):
             return get_outline_level_of_style(style.base_style)
     except Exception:
         return 10   # 正文
-# （逻辑与 img_show.py 中一致）:contentReference[oaicite:3]{index=3}
 
 def find_node_place(node, parent):
     """把 node 按层级挂到 parent 子树（与 img_show.py 一致）"""
@@ -82,25 +80,39 @@ def find_node_place(node, parent):
     else:
         raise ValueError("文档结构错误，请检查标题层级")
     return
-# :contentReference[oaicite:4]{index=4}
 
-def collect_data_from_node(tree_node):
-    data_list = list(tree_node.get('data', []))
-    for ch in tree_node.get('children', []):
-        data_list.extend(collect_data_from_node(ch))
+def collect_data_from_node(tree_nodes):
+    data_list = []
+    tree_nodes = [tree_nodes] if not isinstance(tree_nodes, list) else tree_nodes
+    for tree_node in tree_nodes:
+        data_list.extend(tree_node.get('data', []))
+        for ch in tree_node.get('children', []):
+            data_list.extend(collect_data_from_node(ch))
     return data_list
-# :contentReference[oaicite:5]{index=5}
 
-def find_node_by_text(node, txt_substr):
+def find_node_by_text(node, txt_substr, find_all=False):
+    if txt_substr == "附录":
+        find_all = True
+        
+    if find_all:
+        "按子串匹配标题文本，广度优先全搜索"
+        found = []
+        for ch in node.get('children', []):
+            if txt_substr in (ch.get('text') or ''):
+                found.append(ch)
+            else:
+                if ch:
+                    found.extend(find_node_by_text(ch, txt_substr, find_all))
+        return found
+    
     """按子串匹配标题文本，深度优先"""
     for ch in node.get('children', []):
         if txt_substr in (ch.get('text') or ''):
-            return ch
+            return [ch]
         found = find_node_by_text(ch, txt_substr)
         if found:
             return found
     return None
-# :contentReference[oaicite:6]{index=6}
 
 
 # === 表格 caption 规则（与图类似，只是把 Fig/图 换成 Table/表） ===
@@ -254,34 +266,34 @@ def Create_table_tree(doc_path: str):
             # 非标题段落：忽略（表格由 'tbl' 分支处理）
         elif kind == 'tbl':
             tbl = obj  # python-docx Table
-            wct = wcTable(tbl, tbl_count)
 
             # Caption 策略：优先取“上一段非空文本”；若匹配“表/Tab/Table …”更好
             caption = _prev_para_text(doc, tbl._tbl) or ""
+            
             if caption:
                 if RE_TABCAP_APPX.match(caption) or RE_TABCAP_NUM.match(caption):
                     pass  # 合格的表注
                 else:
                     caption = "未知表格"
                     pass
-
+                
+            wct = wcTable(tbl, tbl_count, caption)
             # 把这个表挂到当前 parent 节点
             parent['data'].append(("table", wct, caption, tbl_count))
             tbl_count += 1
 
     return root
 
-
 # === API：按标题文本收集该子树所有 data（与你的 img_show 同名接口） ===
-def get_datalist_by_text(table_tree, txt):
+def get_datalist_by_text(table_tree, txt, find_all=False):
     # 收集txt下的所有data
     if not txt:
         return collect_data_from_node(table_tree)
     
-    node = find_node_by_text(table_tree, txt)
-    if not node:
+    nodes = find_node_by_text(table_tree, txt, find_all)
+    if not nodes:
         return []
-    return collect_data_from_node(node)
+    return collect_data_from_node(nodes)
 # （find_node_by_text / collect_data_from_node 与 img_show.py 逻辑一致）:contentReference[oaicite:10]{index=10}
 
 
@@ -289,6 +301,6 @@ def get_datalist_by_text(table_tree, txt):
 if __name__ == "__main__":
     path = r"E:\Gaphor\gaphor\gaphor\ui\utils\others\载人空间站用半导体分立器件CYSR3015C型硅肖特基二极管应用指南_zyh最终修订版.docx"
     tree = Create_table_tree(path)
-    dl = get_datalist_by_text(tree, "")
+    dl = get_datalist_by_text(tree, "特性", find_all=True)
     # dl 形如：[("table", wcTable实例, caption, table_index), ...]
     print("器件概况 下表格数：", len([d for d in dl if d and d[0] == "table"]))

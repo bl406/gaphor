@@ -3,8 +3,8 @@ import re
 import sys
 from typing import List, Tuple, Any, Dict, Iterable, Optional
 from gaphor.ui.utils import state
-from gaphor.ui.utils import img_show_ayf as img_show
-from gaphor.ui.utils import table_tree_ayf as table_tree
+from gaphor.ui.utils import img_show
+from gaphor.ui.utils import table_tree
 import unicodedata
 import requests
 from importlib.resources import files
@@ -247,11 +247,32 @@ def _build_queries_from_api_or_fallback(text: str) -> list[str]:
     queries = [q for q in unique_keep_order(queries, key=lambda s: s) if q.strip() not in black_names]
     return queries
 
+def search_by_queries_zyh(queries):
+    image_list, table_list = [], []
+    table_list_all = table_tree.get_datalist_by_text(state.table_tree, "")
+    image_list_all = img_show.get_datalist_by_text(state.image_tree, "")
+    for query in queries:
+        new_table_list = table_tree.get_datalist_by_text(state.table_tree, query, find_all=True)
+        new_image_list = img_show.get_datalist_by_text(state.image_tree, query, find_all=True)
+        new_table_list_by_caption = [tbl for tbl in table_list_all if query in tbl[2]]
+        new_image_list_by_caption = [img for img in image_list_all if query in img[2]]
+        image_list = merge_unique(image_list, merge_unique(new_image_list, new_image_list_by_caption))
+        table_list = merge_unique(table_list, merge_unique(new_table_list, new_table_list_by_caption))
+    return image_list, table_list
+        
+def merge_unique(old_list, new_list):
+    seen = set(old_list)
+    for x in new_list:
+        if x not in seen:
+            old_list.append(x)
+            seen.add(x)
+    return old_list
+
 def get_research(text: str):
 
     queries = _build_queries_from_api_or_fallback(text)
     print(f"[AcsemAIWindow] search with:{queries}")
-    raw_img, raw_tbl = search_by_queries_raw(queries)
+    raw_img, raw_tbl = search_by_queries_zyh(queries)
 
     # 转成三元组（去掉 idx）
     def to_triplets(items):
@@ -262,9 +283,10 @@ def get_research(text: str):
                 trip.append((tag, data, caption, 0))
         return trip
 
-    img_trip = to_triplets(raw_img)
-    tbl_trip = to_triplets(raw_tbl)
-    return (img_trip, tbl_trip)
+    # img_trip = to_triplets(raw_img)
+    # tbl_trip = to_triplets(raw_tbl)
+    # return (img_trip, tbl_trip)
+    return raw_img, raw_tbl
 
 def main():
     if len(sys.argv) > 1:

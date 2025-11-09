@@ -2,5 +2,6 @@
     "url" : "http://172.17.140.239:8000" ,
     "search" : "extract_keywords",
     "table_chat": "table_chat",
-    "img_chat":"img_chat"
+    "img_chat":"img_chat",
+    "all_chat": "all_chat"
 }
