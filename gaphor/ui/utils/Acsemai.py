@@ -1,4 +1,4 @@
-from typing import Any
+from typing import List, Tuple, Any, Dict, Iterable, Optional
 from gaphor.ui import utils
 from gaphor.ui.utils import state, img_show, table_tree
 import gaphor.ui.utils.demo as demo
@@ -32,6 +32,7 @@ def get_api(key):
     search : 搜索
     table_chat : 表格问答
     img_chat : 图片问答
+    all_caht : 混合问答
     """
     api_url_file_config = files("gaphor.ui.utils").joinpath("api_url_config.json")
     with open(api_url_file_config,'r', encoding='UTF-8') as f:
@@ -93,14 +94,8 @@ def all_chat(text, image_result, table_result):
     
     query = text
         
-    # ALL_PROMPT = f"""
-    # <Table>{table_content}</Table>
-    # <Image>{image_content}</Image>
-    # <Task>上面是一些CSV的表格，和一些图片及其按顺序对应的图注，你需要阅读所有材料，完成任务，并将你的最终答案通过<answer></answer>包裹。任务是：{query}</Task>
-    # """
     ALL_PROMPT = f"""
         你是一个严谨的视觉-表格联合理解助理。请严格遵守以下规则完成任务：
-
         【已提供材料】
         1）表格内容：
         <Table>
@@ -112,22 +107,24 @@ def all_chat(text, image_result, table_result):
         {image_content}
         </Image>
 
-        【特别说明】
-        - 表格与图注按顺序一一对应。
-        - 若某条图注为“未知图片”，代表该图片未获取到题注，请不要杜撰或使用不存在的信息。
-        - 所有推断必须基于表格、图片和题注本身，不允许编造内容。
+        【材料说明】
+        - 表格与图片按顺序严格一一对应：第 1 个表格对应第 1 张图片，以此类推。
+        - 若某条图注为“未知图片”，代表该图片没有题注。禁止杜撰、猜测或使用外部知识补全信息。
+        - 所有推断必须基于表格、图片和题注中明确出现的数据或事实。
 
         【你的任务】
-        - 阅读所有表格与图片信息，理解其中的数据、关系和语义。
+        - 阅读所有表格与图片内容，理解数据、关系和语义。
         - 完成以下任务：{query}
 
         【输出要求】
-        1）只输出最终答案，不输出推理过程、不输出引言、不输出解释。
-        2）最终答案必须使用以下格式包裹，不允许在标签外包含其他文字。
-        3）如果图片中有数据，你必须结合其中具体数据来对图片内容进行分析，确保每一个结论都有具体数据支撑。
+        1）只输出最终答案，不输出任何推理过程、解释或前置说明。
+        2）必须严格使用以下格式，否则视为错误输出：
         <answer>你的最终答案</answer>
+        3）每一句结论必须使用来自表格或图片中的具体数据支撑，不允许使用模糊表达。
+        4）禁止使用常识、揣测或不存在的信息；若材料未提供，则回答“材料未提供相关信息”。
 
         现在开始，请阅读材料并按照要求回答。
+
         """
 
     url = get_api("all_chat")

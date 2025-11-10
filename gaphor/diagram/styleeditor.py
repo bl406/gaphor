@@ -645,6 +645,48 @@ class AcsemAIImageChatWindow(AcsemAITableChatWindow):
         print("[AcsemAIWindow] answer as:", result)
         self.set_output_text(result)
         return 
+    
+class AcsemAIAllChatWindow(AcsemAITableChatWindow):
+    def __init__(self, parent_window, title, table=None, image_results=[], table_results=[]):
+        super().__init__(parent_window, title, table)
+        self.images = image_results
+        self.tables = table_results
+        
+        # 点击“执行”后的行为
+    def _on_run_clicked(self, _button):
+        text = self._get_input_text().strip()
+        print("[AcsemAIWindow] run with:", text)
+        result = Acsemai.all_chat(text, self.images, self.tables)
+        print("[AcsemAIWindow] answer as:", result)
+        self.set_output_text(result)
+        return 
+
+class AcsemAISummaryChatWindow(AcsemAIAllChatWindow):
+    def __init__(self, parent_window, title, table=None, image_results=[], table_results=[]):
+        super().__init__(parent_window, title, table, image_results, table_results)
+        self.run_once()
+        
+    def run_once(self):
+        num_image = len(self.images)
+        num_table = len(self.tables)
+        
+        Summary_prompt = f"""总结所有的{num_image}张图片和{num_table}张表格的内容。要求：\n- 按顺序逐一总结\n- 每条必须包含来自材料的具体数字或关键数据\n- 不允许省略任何一项图片和任何一项表格\n- 不允许使用常识、推测或不存在的数据"""
+        self.set_input_text(Summary_prompt)
+        GLib.idle_add(lambda: (self._on_run_clicked(None), False))
+        
+        # 写入结果文本
+    def set_input_text(self, text: str):
+        buf = self.input_view.get_buffer()
+        buf.set_text(text)
+        
+    def _on_run_clicked(self, _button):
+        text = self._get_input_text().strip()
+        print("[AcsemAIWindow] run with:", text)
+        result = Acsemai.all_chat(text, self.images, self.tables)
+        print("[AcsemAIWindow] answer as:", result)
+        self.set_output_text(result)
+        return 
+    
         
 @PropertyPages.register(Presentation)
 class StylePropertyPage(PropertyPageBase):
@@ -673,6 +715,7 @@ class StylePropertyPage(PropertyPageBase):
             signals={
                 "open-show-images": (self._on_open_show_images,),
                 "open-show-tables": (self._on_open_show_tables,),
+                "open-summary": (self._on_open_summary,),
             },
         )
 
@@ -737,6 +780,25 @@ class StylePropertyPage(PropertyPageBase):
             parent_window=self.main_window.window,
             datalist=datalist,
             title=_make_title(block_title, datalist)
+        )
+        win.present()
+        
+    def _on_open_summary(self, _button):
+        def _make_title(block_title, datalist_image, datalist_table):
+            return f"模块总结：{block_title} ('共{len(datalist_image)}项图片，{len(datalist_table)}项表格')"
+               
+        block_title = getattr(getattr(self.subject, "subject", None), "name", None)
+        # 打开“表格展示”窗口
+        table_tree = state.table_tree
+        image_tree = state.image_tree
+        datalist_image = utils.img_show.get_datalist_by_text(image_tree, block_title)
+        datalist_table = utils.table_tree.get_datalist_by_text(table_tree, block_title)
+        
+        win = AcsemAISummaryChatWindow(
+            parent_window=self.main_window.window,
+            image_results=datalist_image,
+            table_results=datalist_table,
+            title=_make_title(block_title, datalist_image=datalist_image, datalist_table=datalist_table)
         )
         win.present()
     

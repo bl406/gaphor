@@ -9,7 +9,7 @@ import os
 import asyncio
 from gaphor.ui import utils
 from gaphor.ui.utils import state, Acsemai
-from gaphor.diagram.styleeditor import AcsemAIImageChatWindow, AcsemAITableChatWindow, ImagesViewerWindow, ImageEditorWindow, TableEditorWindow, TablesViewerWindow
+from gaphor.diagram.styleeditor import AcsemAIAllChatWindow, ImagesViewerWindow, TablesViewerWindow
 
 from importlib.resources import files
 from collections.abc import Callable
@@ -741,18 +741,6 @@ class AcsemAIWindow(Gtk.ApplicationWindow):
             search_table = False
         return searcch_image, search_table
     
-class AcsemAIAllChatWindow(AcsemAITableChatWindow):
-    def __init__(self, parent_window, title, table=None, image_results=[], table_results=[]):
-        super().__init__(parent_window, title, table)
-        self.images = image_results
-        self.tables = table_results
+
         
-        # 点击“执行”后的行为
-    def _on_run_clicked(self, _button):
-        text = self._get_input_text().strip()
-        print("[AcsemAIWindow] run with:", text)
-        result = Acsemai.all_chat(text, self.images, self.tables)
-        print("[AcsemAIWindow] answer as:", result)
-        self.set_output_text(result)
-        return 
 
